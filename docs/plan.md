@@ -16,8 +16,9 @@
 
 - **원본 레포에는 쓰지 않는다.** 읽어서 필요한 파일만 이 레포로 옮긴다.
 - **원본 두 레포는 삭제하지 않는다.** 커밋 이력과 실험 로그가 논문 재현성의 증거다.
-- **패키지명은 `sdn_intent`다.** 아래 "확인된 사실 1"의 이미 검증된 IR 코드가 이
-  이름을 쓰고 있어서 그대로 따른다.
+- **패키지명은 `tiger_sdn`이다.** 레포명(TIGER-SDN)과 일치시킨다. 아래 "확인된 사실 1"의
+  IR 코드는 원본에서 `sdn_intent`라는 이름을 쓰고 있으므로, 이식할 때 이름을 바꾼다
+  (`src/sdn_intent/` -> `src/tiger_sdn/`, 내부 import 경로도 함께 고침).
 
 ---
 
@@ -84,7 +85,7 @@ TIGER-SDN/
 │   ├── exp1/{run,score,convert_gold350}.py, config/, logs/, reports/
 │   └── exp2/
 │
-├── src/sdn_intent/
+├── src/tiger_sdn/
 │   ├── config.py
 │   ├── ir/                      Stage 4
 │   ├── compile/                 Stage 5
@@ -181,7 +182,7 @@ TIGER-SDN/
 | `stage1_intent/intent_parser.py`의 `SYSTEM_PROMPT` | 텍스트만 추출해 `prompts/intent_ir.md`로 |
 | `run_exp1.py`의 `SYSTEM_DIRECT_FLOW`(T-A용, 하드코딩되어 있음) | `prompts/direct_flow.md`로 |
 | `run_exp1.py` 본체 | `experiments/exp1/run.py`로 |
-| `xai_pipeline/config.py` | `src/sdn_intent/config.py`로. `.env` 로딩만 남기고 트림 |
+| `xai_pipeline/config.py` | `src/tiger_sdn/config.py`로. `.env` 로딩만 남기고 트림 |
 
 **신규:** `prompts/registry.py`(treatment -> 프롬프트 매핑), `tests/test_prompt_registry.py`
 (대응표 고정, 프롬프트 파일 해시 스냅샷).
@@ -228,7 +229,8 @@ TIGER-SDN/
 
 ### Stage 4. Intent IR
 
-베이스: `sdn-intent-framework`의 `src/sdn_intent/ir/`(699 LOC, "확인된 사실 1" 참고).
+베이스: `sdn-intent-framework`의 `src/sdn_intent/ir/`(699 LOC, "확인된 사실 1" 참고) ->
+`src/tiger_sdn/ir/`로 옮기며 패키지명을 바꾼다(import 경로 포함).
 흡수: `research/safe_intent_sdn/intent_ir.py`의 `StrictModel`/`extra="forbid"`.
 대조용(이식 안 함): `src/xai_pipeline/models/intent_ir.py`.
 
