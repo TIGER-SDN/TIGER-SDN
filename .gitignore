@@ -415,3 +415,20 @@ $RECYCLE.BIN/
 *.lnk
 
 # End of https://www.toptal.com/developers/gitignore/api/windows,macos,linux,visualstudiocode,python,jupyternotebooks,node
+
+# ─────────────────────────────────────────────────────────────
+# TIGER-SDN project rules — 위 템플릿 규칙을 덮어쓴다
+# 근거: docs/plan.md 규율 4
+# ─────────────────────────────────────────────────────────────
+
+# 인용된 실험 런의 원시 LLM 응답 로그는 반드시 커밋한다.
+# 위 68행의 `logs` 규칙 때문에 선행 레포가 E1 원시 로그를 영구히 잃었다.
+# 이 로그가 없으면 Exp-1 재현이 LLM 재호출 없이는 불가능해진다.
+!experiments/**/logs/
+!experiments/**/logs/**
+!experiments/**/reports/
+!experiments/**/reports/**
+
+# 평가 데이터셋 (템플릿의 `data`/`*.jsonl` 계열 규칙 무력화)
+!data/
+!data/**
