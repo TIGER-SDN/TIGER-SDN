@@ -327,10 +327,10 @@ JSON Schema 자동생성, secret redaction, 동시성에서 연구 트랙이 우
 
 ## 진행 현황
 
-- [ ] **Stage 0.** 레포 골격, LICENSE, CONTRIBUTORS, PROVENANCE, CI
+- [x] **Stage 0.** 레포 골격, LICENSE, CONTRIBUTORS, PROVENANCE, CI
   - [x] `docs/plan.md`, `CLAUDE.md`, `README.md`, `.gitignore`
-  - [ ] `LICENSE`, `CONTRIBUTORS.md`, `docs/PROVENANCE.md`
-  - [ ] `pyproject.toml`, `.github/workflows/ci.yml`
+  - [x] `LICENSE`, `CONTRIBUTORS.md`, `docs/PROVENANCE.md`, `.env.example`
+  - [x] `pyproject.toml`, `.github/workflows/ci.yml`
 - [ ] **Stage 1.** GOLD-350
 - [ ] **Stage 2.** Exp-1 회귀 하네스
 - [ ] **Stage 3.** 프롬프트 단일 출처화 ← 여기까지 1차 목표
