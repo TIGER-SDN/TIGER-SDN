@@ -23,8 +23,10 @@ jobs:
 
       - name: Run pytest
         run: |
+          set +e
           pytest
           code=$?
+          set -e
           # exit code 5 = no tests collected, which is expected pre-Stage-1
           if [ $code -ne 0 ] && [ $code -ne 5 ]; then
             exit $code
