@@ -73,7 +73,6 @@ TIGER-SDN/
 │
 ├── docs/
 │   ├── plan.md                  이 문서
-│   ├── PROVENANCE.md            이식한 파일별 원본 경로
 │   ├── ANNOTATION_GUIDELINE.md  규범 스펙 - 변환기와 프롬프트가 참조
 │   └── DATASET_CARD.md
 │
@@ -108,12 +107,11 @@ TIGER-SDN/
 |---|---|
 | `LICENSE` | `sdn-intent-framework`의 `LICENSE.md` 그대로. MIT, 저자 `Jangmyun, seongyooo` |
 | `CONTRIBUTORS.md` | 신규. 두 저자, 서브시스템 주 저자(`xai_pipeline` = seongyooo, `safe_intent_sdn` = Jangmyun) |
-| `docs/PROVENANCE.md` | 신규. 이식하는 파일마다 원본 경로를 기록. 매 Stage 끝에 갱신 |
 | `.env.example` | `sdn-intent-framework`의 것 그대로 |
 | `pyproject.toml` | 신규. 초기 의존성은 `pydantic`, `python-dotenv`, `pytest`만 |
 | `.github/workflows/ci.yml` | 신규. Stage 2에서 회귀 테스트 연결 |
 
-**완료 기준:** `pytest` 0 tests 성공, CI 초록, `LICENSE`/`CONTRIBUTORS.md`/`docs/PROVENANCE.md` 존재.
+**완료 기준:** `pytest` 0 tests 성공, CI 초록, `LICENSE`/`CONTRIBUTORS.md` 존재.
 
 ---
 
@@ -327,9 +325,9 @@ JSON Schema 자동생성, secret redaction, 동시성에서 연구 트랙이 우
 
 ## 진행 현황
 
-- [x] **Stage 0.** 레포 골격, LICENSE, CONTRIBUTORS, PROVENANCE, CI
+- [x] **Stage 0.** 레포 골격, LICENSE, CONTRIBUTORS, CI
   - [x] `docs/plan.md`, `CLAUDE.md`, `README.md`, `.gitignore`
-  - [x] `LICENSE`, `CONTRIBUTORS.md`, `docs/PROVENANCE.md`, `.env.example`
+  - [x] `LICENSE`, `CONTRIBUTORS.md`, `.env.example`
   - [x] `pyproject.toml`, `.github/workflows/ci.yml`
 - [x] **Stage 1.** GOLD-350 (재현성용 provenance 스크립트는 core 미이식으로 보류)
 - [ ] **Stage 2.** Exp-1 회귀 하네스
