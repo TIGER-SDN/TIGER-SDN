@@ -1,0 +1,144 @@
+[
+  {
+    "id": "D-FWD",
+    "category": "forwarding",
+    "note": "기본 forward — device + egress_port 포함, src/dst IP 명시 (forward는 IP 필수)",
+    "instruction": "Route IPv4 ICMP traffic from demo-client (10.9.9.1) to demo-cache (10.9.9.2) through demo-switch port 7.",
+    "output": {
+      "rules": [
+        {
+          "action": "forward",
+          "intent_type": "forwarding",
+          "selector": {
+            "source":      {"host": "demo-client", "ip": "10.9.9.1"},
+            "destination": {"host": "demo-cache",  "ip": "10.9.9.2"},
+            "eth_type": "ipv4",
+            "protocol": "icmp",
+            "src_port": null,
+            "dst_port": null,
+            "in_port":  null
+          },
+          "enforcement": {
+            "device": "demo-switch",
+            "egress_port": 7,
+            "alt_egress_port": null,
+            "set_vlan_id": null
+          },
+          "qos": null,
+          "routing": null
+        }
+      ],
+      "description": "Forward ICMP from demo-client to demo-cache via demo-switch port 7."
+    }
+  },
+  {
+    "id": "D-BLOCK",
+    "category": "security",
+    "note": "block(deny) — src/dst IP 명시 (block은 IP 필수), protocol + dst_port",
+    "instruction": "Block UDP traffic from lab-red (10.9.9.3) to lab-blue (10.9.9.4) on destination port 65000.",
+    "output": {
+      "rules": [
+        {
+          "action": "block",
+          "intent_type": "security",
+          "selector": {
+            "source":      {"host": "lab-red",  "ip": "10.9.9.3"},
+            "destination": {"host": "lab-blue", "ip": "10.9.9.4"},
+            "eth_type": null,
+            "protocol": "udp",
+            "src_port": null,
+            "dst_port": 65000,
+            "in_port":  null
+          },
+          "enforcement": null,
+          "qos": null,
+          "routing": null
+        }
+      ],
+      "description": "Block UDP/65000 from lab-red to lab-blue."
+    }
+  },
+  {
+    "id": "D-QOS",
+    "category": "qos",
+    "note": "qos — qos.queue 사용, IP는 선택적 (qos는 IP 없어도 허용)",
+    "instruction": "Assign queue 6 to TCP traffic destined for training-sink on edge-node.",
+    "output": {
+      "rules": [
+        {
+          "action": "qos",
+          "intent_type": "qos",
+          "selector": {
+            "source":      null,
+            "destination": {"host": "training-sink", "ip": null},
+            "eth_type": null,
+            "protocol": "tcp",
+            "src_port": null,
+            "dst_port": null,
+            "in_port":  null
+          },
+          "enforcement": {
+            "device": "edge-node",
+            "egress_port": null,
+            "alt_egress_port": null,
+            "set_vlan_id": null
+          },
+          "qos": {
+            "queue": 6,
+            "min_bandwidth_mbps": null,
+            "max_latency_ms": null
+          },
+          "routing": null
+        }
+      ],
+      "description": "Apply QoS queue 6 to TCP traffic to training-sink via edge-node."
+    }
+  },
+  {
+    "id": "D-SFC",
+    "category": "sfc",
+    "note": "sfc — routing.waypoints + egress_port(waypoint 진입) + alt_egress_port(복귀 후 출력)",
+    "instruction": "Steer HTTP traffic from alpha-host (10.9.9.5) to beta-host (10.9.9.6) through the firewall at demo-switch port 9, then out port 2.",
+    "output": {
+      "rules": [
+        {
+          "action": "sfc",
+          "intent_type": "sfc",
+          "selector": {
+            "source":      {"host": "alpha-host", "ip": "10.9.9.5"},
+            "destination": {"host": "beta-host",  "ip": "10.9.9.6"},
+            "eth_type": "ipv4",
+            "protocol": "tcp",
+            "src_port": null,
+            "dst_port": 80,
+            "in_port":  null
+          },
+          "enforcement": {
+            "device": "demo-switch",
+            "egress_port": 9,
+            "alt_egress_port": 2,
+            "set_vlan_id": null
+          },
+          "qos": null,
+          "routing": {
+            "waypoints": ["demo-switch:9"],
+            "via_device": null,
+            "avoid_device": null
+          }
+        }
+      ],
+      "description": "Steer HTTP from alpha-host to beta-host through firewall at demo-switch:9, exit port 2."
+    }
+  },
+  {
+    "id": "D-REJECT",
+    "category": "rejection",
+    "note": "rejection — unsupported 사유. status/rejection_reason/rejection_detail만 포함",
+    "instruction": "Configure an MPLS tunnel from lab-src to lab-dst.",
+    "output": {
+      "status": "rejected",
+      "rejection_reason": "unsupported",
+      "rejection_detail": "MPLS tunnel configuration is not supported."
+    }
+  }
+]
