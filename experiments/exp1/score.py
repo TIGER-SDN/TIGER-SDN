@@ -1,24 +1,24 @@
 """
-Ported from sdn-intent-framework:research/experiments/eval/score_exp1.py (see docs/PROVENANCE.md).
+experiments/exp1/score.py — Exp-1 Scoring Engine
 
-research/experiments/eval/score_exp1.py - Exp-1 Scoring Engine
+원본: sdn-intent-framework의 research/experiments/eval/score_exp1.py
 
 Scores run_exp1.py output JSONL files against gold dataset.
 Produces a structured JSON report with per-treatment, per-category,
 and per-repetition metrics.
 
 Usage:
-    python research/experiments/eval/score_exp1.py \\
-        --dataset research/experiments/eval/data/intents_eval.jsonl \\
-        --topology research/experiments/eval/data/topology_eval.json \\
-        --logs research/experiments/eval/logs/ \\
-        --output research/experiments/eval/reports/summary_exp1.json
+    python experiments/exp1/score.py \\
+        --dataset data/gold/gold350_eval.jsonl \\
+        --topology data/gold/topology_eval.json \\
+        --logs experiments/exp1/logs/ \\
+        --output experiments/exp1/reports/summary.json
 
     # Score only T-D logs
-    python research/experiments/eval/score_exp1.py ... --treatment T-D
+    python experiments/exp1/score.py ... --treatment T-D
 
     # Include 95% bootstrap CI (slower)
-    python research/experiments/eval/score_exp1.py ... --bootstrap
+    python experiments/exp1/score.py ... --bootstrap
 """
 from __future__ import annotations
 
