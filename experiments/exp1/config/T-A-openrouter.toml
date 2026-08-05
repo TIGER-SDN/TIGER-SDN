@@ -1,0 +1,17 @@
+# Ported from sdn-intent-framework:research/experiments/eval/config/T-A-openrouter.toml (see docs/PROVENANCE.md)
+[experiment]
+treatment      = "T-A"
+description    = "Direct FlowRule — LLM이 ONOS FlowRule JSON을 직접 생성 (IR/컴파일러 없음)"
+output_format  = "direct_flow"
+few_shot       = false
+grounding      = false
+dataset_path   = "research/experiments/eval/data/gold350_eval.jsonl"
+topology_path  = "research/experiments/eval/data/topology_eval.json"
+demos_path     = ""   # 사용 안 함
+
+[llm]
+model          = "qwen/qwen3-8b"
+temperature    = 0.2
+max_tokens     = 8192
+timeout_s      = 120.0
+retries        = 2

@@ -330,7 +330,15 @@ JSON Schema 자동생성, secret redaction, 동시성에서 연구 트랙이 우
   - [x] `LICENSE`, `CONTRIBUTORS.md`, `.env.example`
   - [x] `pyproject.toml`, `.github/workflows/ci.yml`
 - [x] **Stage 1.** GOLD-350 (재현성용 provenance 스크립트는 core 미이식으로 보류)
-- [ ] **Stage 2.** Exp-1 회귀 하네스
+- [x] **Stage 2.** Exp-1 회귀 하네스 (완료, 이슈 #4)
+  - `score.py`, `convert_gold350.py`, `config/T-{A,B,C,D}-openrouter.toml` 이식
+  - T-A/B/C/D 원시 로그(1.9MB)는 `sdn-intent-framework`의 `logs 2/`(로컬,
+    gitignore됨)에서 발견해 이식. `TA-TD_openrouter_comparison.md`가 지목한
+    run_id로 골든 리포트 재생성, 원 보고서 수치와 일치 확인.
+  - `tests/test_exp1_regression.py` 신규 작성, `pytest` 4개 전부 초록.
+  - 이식 중 `score.py`의 `ROOT` 경로 깊이 계산과 argparse `%` 이스케이프 버그를
+    발견해 수정 (원본: `sdn-intent-framework`의
+    `research/experiments/eval/score_exp1.py`).
 - [ ] **Stage 3.** 프롬프트 단일 출처화 ← 여기까지 1차 목표
 - [ ] **마감 전 병행 작업** (논문 서술, SFC 조사, rep 확대, 라벨 수정)
 - [ ] **KICS 논문 마감 2026-08-24**

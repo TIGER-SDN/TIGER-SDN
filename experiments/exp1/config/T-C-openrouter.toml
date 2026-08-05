@@ -1,0 +1,17 @@
+# Ported from sdn-intent-framework:research/experiments/eval/config/T-C-openrouter.toml (see docs/PROVENANCE.md)
+[experiment]
+treatment      = "T-C"
+description    = "IR + Few-Shot — IntentIR 형식, 정적 5개 데모 삽입, grounding 없음"
+output_format  = "intent_ir"
+few_shot       = true
+grounding      = false
+dataset_path   = "research/experiments/eval/data/gold350_eval.jsonl"
+topology_path  = "research/experiments/eval/data/topology_eval.json"
+demos_path     = "research/experiments/eval/data/demonstrations.json"
+
+[llm]
+model          = "qwen/qwen3-8b"
+temperature    = 0.2
+max_tokens     = 8192
+timeout_s      = 120.0
+retries        = 2

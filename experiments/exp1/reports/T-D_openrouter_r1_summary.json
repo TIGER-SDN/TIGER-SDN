@@ -1,0 +1,355 @@
+{
+  "metadata": {
+    "generated_at": "2026-08-05T01:42:32.650457+00:00",
+    "dataset": "gold350_eval.jsonl",
+    "topology": "topology_eval.json",
+    "logs": "/Users/chu-ingyu/projects/TIGER-SDN/experiments/exp1/logs"
+  },
+  "treatments": {
+    "T-D": {
+      "run_ids": [
+        "T-D-qwen-qwen3-8b-ede0ac95"
+      ],
+      "n_repetitions": 1,
+      "n_cases": 350,
+      "n_accepted_gold": 300,
+      "n_rejected_gold": 50,
+      "per_rep": [
+        {
+          "repetition": 1,
+          "n_records": 350,
+          "metrics": {
+            "schema_validity": 0.9885714285714285,
+            "status_match": 0.9485714285714286,
+            "false_rejection_rate": 0.04666666666666667,
+            "rejection_recall": 0.92,
+            "rejection_reason_match": 0.9565217391304348,
+            "false_acceptance_rate": 0.06,
+            "slot_accuracy": {
+              "action": 0.965034965034965,
+              "source_ip": 0.9083969465648855,
+              "destination_ip": 0.9080882352941176,
+              "protocol": 1.0,
+              "dst_port": 0.9680851063829787,
+              "device": 0.8188976377952756,
+              "egress_port": 0.8348623853211009,
+              "alt_egress_port": 0.2916666666666667,
+              "queue": 1.0,
+              "min_bandwidth_mbps": 1.0,
+              "max_latency_ms": 1.0,
+              "waypoints": 0.5416666666666666,
+              "via_device": null,
+              "avoid_device": null
+            },
+            "normalized_exact_match": 0.6923076923076923,
+            "hallucinated_entity_rate": 0.0,
+            "rule_count_match": 0.9555555555555556
+          }
+        }
+      ],
+      "aggregate": {
+        "schema_validity": {
+          "mean": 0.9886,
+          "std": 0.0,
+          "n": 1
+        },
+        "status_match": {
+          "mean": 0.9486,
+          "std": 0.0,
+          "n": 1
+        },
+        "false_rejection_rate": {
+          "mean": 0.0467,
+          "std": 0.0,
+          "n": 1
+        },
+        "rejection_recall": {
+          "mean": 0.92,
+          "std": 0.0,
+          "n": 1
+        },
+        "rejection_reason_match": {
+          "mean": 0.9565,
+          "std": 0.0,
+          "n": 1
+        },
+        "false_acceptance_rate": {
+          "mean": 0.06,
+          "std": 0.0,
+          "n": 1
+        },
+        "normalized_exact_match": {
+          "mean": 0.6923,
+          "std": 0.0,
+          "n": 1
+        },
+        "hallucinated_entity_rate": {
+          "mean": 0.0,
+          "std": 0.0,
+          "n": 1
+        },
+        "rule_count_match": {
+          "mean": 0.9556,
+          "std": 0.0,
+          "n": 1
+        },
+        "slot_accuracy": {
+          "action": {
+            "mean": 0.965,
+            "std": 0.0,
+            "n": 1
+          },
+          "source_ip": {
+            "mean": 0.9084,
+            "std": 0.0,
+            "n": 1
+          },
+          "destination_ip": {
+            "mean": 0.9081,
+            "std": 0.0,
+            "n": 1
+          },
+          "protocol": {
+            "mean": 1.0,
+            "std": 0.0,
+            "n": 1
+          },
+          "dst_port": {
+            "mean": 0.9681,
+            "std": 0.0,
+            "n": 1
+          },
+          "device": {
+            "mean": 0.8189,
+            "std": 0.0,
+            "n": 1
+          },
+          "egress_port": {
+            "mean": 0.8349,
+            "std": 0.0,
+            "n": 1
+          },
+          "alt_egress_port": {
+            "mean": 0.2917,
+            "std": 0.0,
+            "n": 1
+          },
+          "queue": {
+            "mean": 1.0,
+            "std": 0.0,
+            "n": 1
+          },
+          "min_bandwidth_mbps": {
+            "mean": 1.0,
+            "std": 0.0,
+            "n": 1
+          },
+          "max_latency_ms": {
+            "mean": 1.0,
+            "std": 0.0,
+            "n": 1
+          },
+          "waypoints": {
+            "mean": 0.5417,
+            "std": 0.0,
+            "n": 1
+          },
+          "via_device": {
+            "mean": null,
+            "std": null,
+            "n": 0
+          },
+          "avoid_device": {
+            "mean": null,
+            "std": null,
+            "n": 0
+          }
+        }
+      },
+      "per_category": {
+        "ambiguous_unsupported": {
+          "n_records": 50,
+          "schema_validity": 0.98,
+          "status_match": 0.92,
+          "false_rejection_rate": null,
+          "rejection_recall": 0.92,
+          "rejection_reason_match": 0.9565,
+          "normalized_exact_match": null,
+          "hallucinated_entity_rate": null,
+          "slot_accuracy": {
+            "action": null,
+            "source_ip": null,
+            "destination_ip": null,
+            "protocol": null,
+            "dst_port": null,
+            "device": null,
+            "egress_port": null,
+            "alt_egress_port": null,
+            "queue": null,
+            "min_bandwidth_mbps": null,
+            "max_latency_ms": null,
+            "waypoints": null,
+            "via_device": null,
+            "avoid_device": null
+          }
+        },
+        "compound": {
+          "n_records": 50,
+          "schema_validity": 0.94,
+          "status_match": 0.9,
+          "false_rejection_rate": 0.1,
+          "rejection_recall": null,
+          "rejection_reason_match": null,
+          "normalized_exact_match": 0.8444,
+          "hallucinated_entity_rate": 0.0,
+          "slot_accuracy": {
+            "action": 1.0,
+            "source_ip": 0.8605,
+            "destination_ip": 0.875,
+            "protocol": 1.0,
+            "dst_port": 1.0,
+            "device": 1.0,
+            "egress_port": 1.0,
+            "alt_egress_port": null,
+            "queue": 1.0,
+            "min_bandwidth_mbps": 1.0,
+            "max_latency_ms": 1.0,
+            "waypoints": null,
+            "via_device": null,
+            "avoid_device": null
+          }
+        },
+        "forwarding": {
+          "n_records": 50,
+          "schema_validity": 1.0,
+          "status_match": 0.98,
+          "false_rejection_rate": 0.02,
+          "rejection_recall": null,
+          "rejection_reason_match": null,
+          "normalized_exact_match": 0.8367,
+          "hallucinated_entity_rate": 0.0,
+          "slot_accuracy": {
+            "action": 1.0,
+            "source_ip": 0.85,
+            "destination_ip": 0.8571,
+            "protocol": 1.0,
+            "dst_port": 0.8462,
+            "device": 1.0,
+            "egress_port": 1.0,
+            "alt_egress_port": null,
+            "queue": null,
+            "min_bandwidth_mbps": null,
+            "max_latency_ms": null,
+            "waypoints": null,
+            "via_device": null,
+            "avoid_device": null
+          }
+        },
+        "qos": {
+          "n_records": 50,
+          "schema_validity": 1.0,
+          "status_match": 0.88,
+          "false_rejection_rate": 0.12,
+          "rejection_recall": null,
+          "rejection_reason_match": null,
+          "normalized_exact_match": 0.8409,
+          "hallucinated_entity_rate": 0.0,
+          "slot_accuracy": {
+            "action": 1.0,
+            "source_ip": 0.8409,
+            "destination_ip": 0.8409,
+            "protocol": 1.0,
+            "dst_port": 1.0,
+            "device": 1.0,
+            "egress_port": null,
+            "alt_egress_port": null,
+            "queue": 1.0,
+            "min_bandwidth_mbps": 1.0,
+            "max_latency_ms": 1.0,
+            "waypoints": null,
+            "via_device": null,
+            "avoid_device": null
+          }
+        },
+        "reroute": {
+          "n_records": 50,
+          "schema_validity": 1.0,
+          "status_match": 1.0,
+          "false_rejection_rate": 0.0,
+          "rejection_recall": null,
+          "rejection_reason_match": null,
+          "normalized_exact_match": 0.58,
+          "hallucinated_entity_rate": 0.0,
+          "slot_accuracy": {
+            "action": 0.9,
+            "source_ip": 0.9756,
+            "destination_ip": 0.9574,
+            "protocol": 1.0,
+            "dst_port": 1.0,
+            "device": 0.88,
+            "egress_port": 0.78,
+            "alt_egress_port": null,
+            "queue": null,
+            "min_bandwidth_mbps": null,
+            "max_latency_ms": null,
+            "waypoints": null,
+            "via_device": null,
+            "avoid_device": null
+          }
+        },
+        "security": {
+          "n_records": 50,
+          "schema_validity": 1.0,
+          "status_match": 1.0,
+          "false_rejection_rate": 0.0,
+          "rejection_recall": null,
+          "rejection_reason_match": null,
+          "normalized_exact_match": 0.9,
+          "hallucinated_entity_rate": 0.0,
+          "slot_accuracy": {
+            "action": 1.0,
+            "source_ip": 0.913,
+            "destination_ip": 0.9091,
+            "protocol": 1.0,
+            "dst_port": 0.9333,
+            "device": 1.0,
+            "egress_port": null,
+            "alt_egress_port": null,
+            "queue": null,
+            "min_bandwidth_mbps": null,
+            "max_latency_ms": null,
+            "waypoints": null,
+            "via_device": null,
+            "avoid_device": null
+          }
+        },
+        "sfc": {
+          "n_records": 50,
+          "schema_validity": 1.0,
+          "status_match": 0.96,
+          "false_rejection_rate": 0.04,
+          "rejection_recall": null,
+          "rejection_reason_match": null,
+          "normalized_exact_match": 0.1667,
+          "hallucinated_entity_rate": 0.0,
+          "slot_accuracy": {
+            "action": 0.8958,
+            "source_ip": 1.0,
+            "destination_ip": 1.0,
+            "protocol": 1.0,
+            "dst_port": 1.0,
+            "device": 0.6458,
+            "egress_port": 0.8542,
+            "alt_egress_port": 0.2917,
+            "queue": null,
+            "min_bandwidth_mbps": null,
+            "max_latency_ms": null,
+            "waypoints": 0.5417,
+            "via_device": null,
+            "avoid_device": null
+          }
+        }
+      }
+    }
+  }
+}
