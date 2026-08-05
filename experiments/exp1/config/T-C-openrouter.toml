@@ -5,9 +5,9 @@ description    = "IR + Few-Shot — IntentIR 형식, 정적 5개 데모 삽입, 
 output_format  = "intent_ir"
 few_shot       = true
 grounding      = false
-dataset_path   = "research/experiments/eval/data/gold350_eval.jsonl"
-topology_path  = "research/experiments/eval/data/topology_eval.json"
-demos_path     = "research/experiments/eval/data/demonstrations.json"
+dataset_path   = "data/gold/gold350_eval.jsonl"
+topology_path  = "data/gold/topology_eval.json"
+demos_path     = "data/gold/demonstrations.json"
 
 [llm]
 model          = "qwen/qwen3-8b"

@@ -5,8 +5,8 @@ description    = "IR Zero-Shot — IntentIR 형식, few-shot 없음, grounding �
 output_format  = "intent_ir"
 few_shot       = false
 grounding      = false
-dataset_path   = "research/experiments/eval/data/gold350_eval.jsonl"
-topology_path  = "research/experiments/eval/data/topology_eval.json"
+dataset_path   = "data/gold/gold350_eval.jsonl"
+topology_path  = "data/gold/topology_eval.json"
 demos_path     = ""
 
 [llm]
