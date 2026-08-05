@@ -93,6 +93,7 @@ pytest
 - Python 3.11 이상. `from __future__ import annotations`, 타입 힌트, `pathlib`.
 - 검증은 pydantic v2. 코어 모델은 `extra="forbid"`.
 - `experiments/exp1/score.py`는 stdlib만 쓴다. 의존성을 추가하지 않는다.
-- 이식한 코드에는 원본 경로를 주석으로 남긴다. 이식한 파일은 `docs/PROVENANCE.md`에도 기록한다.
+- 이식한 코드에는 원본 경로를 주석으로 남긴다. 데이터/문서처럼 주석을 못 남기는 파일은
+  커밋 메시지에 원본 경로를 남긴다.
 - 문서에 `§`, `〃`, `·` 같은 기호를 쓰지 않는다. "4.1절"처럼 풀어 쓴다.
 - 커밋은 작게. 파일 1개와 그 테스트가 1커밋.
