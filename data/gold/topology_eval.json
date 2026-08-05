@@ -1,0 +1,33 @@
+{
+  "topology_id": "sdn-xai-pipeline-eval-v2",
+  "note": "평가용 alias 인벤토리. Grounding(T-D) 시스템 프롬프트 삽입 + 채점 시 엔티티 정규화에 공용 사용. v2 (2026-07-23): GOLD-350 가이드라인 §1 규범 인벤토리에 맞춰 s2/s3 유령 포트(3,4) 제거, 링크 배선(wiring) 섹션 추가 — gold reroute/sfc의 enforcement 값이 배선 지식에 의존하므로 grounding이 이를 커버해야 함.",
+  "entities": [
+    {"id": "host:h1", "aliases": ["h1", "10.0.0.1", "10.0.0.1/32"]},
+    {"id": "host:h2", "aliases": ["h2", "10.0.0.2", "10.0.0.2/32"]},
+    {"id": "host:h3", "aliases": ["h3", "10.0.0.3", "10.0.0.3/32"]},
+    {"id": "host:h4", "aliases": ["h4", "10.0.0.4", "10.0.0.4/32"]},
+    {"id": "device:s1", "aliases": ["s1", "switch 1", "switch1", "of:0000000000000001"]},
+    {"id": "device:s2", "aliases": ["s2", "switch 2", "switch2", "of:0000000000000002"]},
+    {"id": "device:s3", "aliases": ["s3", "switch 3", "switch3", "of:0000000000000003"]},
+    {"id": "device:s4", "aliases": ["s4", "switch 4", "switch4", "of:0000000000000004"]}
+  ],
+  "ports": {
+    "of:0000000000000001": [1, 2, 3, 4, 9],
+    "of:0000000000000002": [1, 2],
+    "of:0000000000000003": [1, 2],
+    "of:0000000000000004": [1, 2, 3, 4]
+  },
+  "wiring": {
+    "s1": {"1": "s2", "2": "s3", "3": "h1", "4": "h2", "9": "firewall/IDS service point (SFC waypoint)"},
+    "s2": {"1": "s1", "2": "s4"},
+    "s3": {"1": "s1", "2": "s4"},
+    "s4": {"1": "s2", "2": "s3", "3": "h3", "4": "h4"}
+  },
+  "wiring_notes": [
+    "h1, h2 attach to s1; h3, h4 attach to s4.",
+    "s1 and s4 are joined via s2 (default path) and via s3 (alternate path).",
+    "s2 hosts IDS/DPI/LB/proxy/scrubbing services; s3 hosts monitoring/logging services.",
+    "A firewall is attached to s1 port 9."
+  ],
+  "capabilities": ["forwarding", "security", "qos", "sfc", "reroute"]
+}
