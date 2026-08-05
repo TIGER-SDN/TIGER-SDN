@@ -1,79 +1,43 @@
-# CLAUDE.md - TIGER-SDN
+# CLAUDE.md
 
-자연어 의도에서 ONOS FlowRule로 가는 파이프라인. `sdn-intent-framework`와
-`sdn-xai-pipeline`에서 핵심 로직을 파일 단위로, 이해하며 이식하는 중이다.
-작업 트리를 통째로 복사하지 않는다.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-`docs/plan.md`가 이 저장소의 유일한 계획 문서다. 작업 전에 읽는다. 새 조사나
-결정이 생기면 별도 파일을 만들지 말고 그 문서를 갱신한다.
+TIGER-SDN is a pipeline from natural-language network intent to ONOS FlowRules, plus
+the evaluation framework used to validate it. It is being ported, file by file and
+with understanding, from two source repos: `Jangmyun/sdn-intent-framework` (code of
+record) and `seongyooo/sdn-xai-pipeline` (raw experiment logs of record — the two
+repos share nearly identical code, but only the latter has the logs). Do not copy
+either work tree wholesale, and do not write to either source repo — read from them,
+port only what's needed.
 
----
+**`docs/plan.md` is the single planning document for this repository.** Read it
+before starting work. If new investigation or decisions come up, update that
+document instead of creating a new one.
 
-## 지금이 어느 단계인지
+## Current stage
 
-- **Stage 0-3(레포 골격, GOLD-350, Exp-1 회귀 하네스, 프롬프트 단일화)이 1차
-  목표다.** Exp-1 수치에 영향을 주는 세 가지(프롬프트, 채점 로직, gold 데이터셋)만
-  건드린다.
-- **Stage 4-8(코어 이식)은 KICS 논문 마감(2026-08-24) 이후로 미루는 걸 권한다.**
-  기술적으로 막혀 있진 않지만, 마감 전엔 논문 병행 작업(`docs/plan.md` 참고)에
-  자원을 쓰는 편이 낫다. `research/paper/`(figure 산출 코드)는 마감 전에 손대지
-  않는다.
+Stages 0-3 (repo skeleton, GOLD-350 dataset, Exp-1 regression harness, prompt
+unification) are the first milestone, targeting the KICS paper deadline
+(2026-08-24). Only three things affect Exp-1 numbers and should be touched before
+the deadline: the prompt, the scoring logic, and the gold dataset. Stage 4-8 (core
+port: IR, compiler, static verification, digital twin) is deferred until after the
+deadline — see `docs/plan.md` for the full staged plan and known pitfalls per stage.
+`research/paper/` (figure-generation code in the source repos) must not be touched
+before the deadline.
 
----
+Before starting Stage 4, resolve this first: verified IR code
+(`sdn-intent-framework`'s `feat/unify-ir` branch, `src/sdn_intent/`, 699 LOC) exists
+only in an uncommitted, unpushed local state — `git clone` cannot retrieve it.
 
-## 원본 레포
-
-`sdn-intent-framework`가 코드 정본, `sdn-xai-pipeline`이 원시 로그 정본이다
-(둘은 코드가 거의 같고 경로만 다르다 - 로그는 후자에만 있다). **원본 레포에는
-쓰지 않는다.** 읽어서 필요한 파일만 이 레포로 옮긴다.
-
-**착수 전 확인할 것:** `sdn-intent-framework`의 `feat/unify-ir` 브랜치에 이미
-검증된 IR 코드(`src/sdn_intent/`, 699 LOC)가 있는데, 이 브랜치는 origin에 push된
-적이 없고 그 안의 코드도 커밋된 적이 없다. `git clone`으로는 못 받는다 - 지금 이
-코드를 갖고 있는 사람이 커밋하고 push해야 다른 사람이 받을 수 있다. Stage 4
-착수 전에 먼저 해결한다.
-
----
-
-## 절대 규칙
-
-1. **프롬프트 문자열을 코드에 쓰지 않는다.** `prompts/*.md`가 단일 출처다.
-   이걸 어겨서 실험 2회가 무효화됐다. `docs/ANNOTATION_GUIDELINE.md`는 문서가
-   아니라 규범 스펙이다 - 프롬프트를 고치면 가이드라인도 같이 본다.
-2. **인용된 런의 원시 로그는 커밋한다.** `experiments/*/logs/`를 gitignore하지
-   않는다. 이걸 어겨서 E1 원시 로그를 영구히 잃었다.
-3. **Stage 2 완료 후로는 회귀 테스트가 초록이 아닌 채로 다음 Stage로 넘어가지 않는다.**
-4. **`data/gold/gold.jsonl`(정본)을 직접 수정하지 않는다.** 파생본은
-   `convert_gold350.py`로만 생성한다.
-5. **마감(2026-08-24) 전에는 `research/paper/`를 손대지 않는다.**
-6. **원본 두 레포는 삭제하지 않는다.**
-7. **패키지명은 `tiger_sdn`이다.** 레포명과 일치시킨다. 원본 IR 코드는
-   `sdn_intent`라는 이름을 쓰므로, Stage 4에서 이식할 때 패키지명과 내부 import
-   경로를 `tiger_sdn`으로 바꾼다.
-
----
-
-## 자주 밟는 함정 (Stage 4-7용, 상세는 `docs/plan.md`)
-
-- gold 정본(`gold.jsonl`)과 채점용 파생본(`gold350_eval.jsonl`)은 스키마가 다르다.
-  `convert_gold350.py`가 잇는다.
-- `intent_type`과 `action`은 다른 축이다. `security`는 `forward`/`block`을 둘 다
-  가진다.
-- 연구 IR의 `require_identity`는 GOLD-350과 비호환 - "최소 하나"로 완화한다.
-- gold의 미지정 필드는 명시적 `null`. `extra="forbid"` 전에 None을 제거한다.
-- 컴파일러가 `waypoints[0]`만 써서 multi-switch SFC가 단일 홉만 컴파일된다.
-  Exp-1엔 무해, Exp-2에선 버그.
-
----
-
-## 명령
+## Commands
 
 ```bash
-# 정본 -> 채점 스키마 (출력이 커밋본과 바이트 동일해야 함)
+# Regenerate the scoring-schema dataset from the canonical gold set
+# (output must be byte-identical to the committed gold350_eval.jsonl)
 python experiments/exp1/convert_gold350.py \
     --input data/gold/gold.jsonl --output data/gold/gold350_eval.jsonl
 
-# Exp-1 재채점 (LLM 호출 없음, 약 2초)
+# Re-score Exp-1 from committed raw logs (no LLM calls, ~2s)
 python experiments/exp1/score.py \
     --dataset data/gold/gold350_eval.jsonl \
     --topology data/gold/topology_eval.json \
@@ -81,19 +45,111 @@ python experiments/exp1/score.py \
     --output experiments/exp1/reports/summary.json \
     --treatment T-D --run-id <run_id>
 
+# Run all tests (regression harness + gold dataset checks)
 pytest
+
+# Run a single test file
+pytest tests/test_exp1_regression.py
 ```
 
-`--run-id`는 같은 treatment에 런이 여럿일 때 필수다.
+`--run-id` is required for `score.py` when a treatment has more than one run under
+`experiments/exp1/logs/`.
 
----
+## Architecture
 
-## 스타일
+```
+natural language intent -> Intent IR -> compiler -> static verification -> Digital Twin -> deployment
+```
 
-- Python 3.11 이상. `from __future__ import annotations`, 타입 힌트, `pathlib`.
-- 검증은 pydantic v2. 코어 모델은 `extra="forbid"`.
-- `experiments/exp1/score.py`는 stdlib만 쓴다. 의존성을 추가하지 않는다.
-- 이식한 코드에는 원본 경로를 주석으로 남긴다. 데이터/문서처럼 주석을 못 남기는 파일은
-  커밋 메시지에 원본 경로를 남긴다.
-- 문서에 `§`, `〃`, `·` 같은 기호를 쓰지 않는다. "4.1절"처럼 풀어 쓴다.
-- 커밋은 작게. 파일 1개와 그 테스트가 1커밋.
+The core design principle: an LLM produces the intent representation, but nothing
+reaches the dataplane until it has been deterministically verified. Intent IR is the
+verifiable intermediate representation between LLM output and actual flow rules.
+
+- **Intent IR** — a strict pydantic (`extra="forbid"`) representation of LLM output,
+  covering forwarding, security, qos, sfc, and reroute intents in one schema.
+- **Compiler** — deterministically turns Intent IR into ONOS FlowRules.
+- **Static verification** — pre-compile conflict detection and topology grounding;
+  rejects nonexistent entities and conflicting rules.
+- **Digital Twin** — Mininet/ONOS-based simulation that verifies flow behavior before
+  deployment.
+
+As of this stage, only the evaluation layer (`experiments/exp1/`, `data/gold/`) is
+ported; `src/tiger_sdn/` (IR, compiler, verifier, twin) does not exist yet — that's
+Stage 4-8.
+
+### Why Exp-1 is decoupled from the core pipeline
+
+`run_exp1.py` (the harness being ported into `experiments/exp1/run.py`) only pulls
+`config` and `SYSTEM_PROMPT` from the core — it never touches the IR, compiler, or
+verifier. That means the only things that can move Exp-1's numbers are the prompt,
+the scoring logic (`experiments/exp1/score.py`), and the gold dataset
+(`data/gold/gold.jsonl` and its derivative). The ported core only affects the paper
+once it's actually exercised, which happens in Exp-2 (Stage 8) — not before.
+
+### GOLD-350 dataset
+
+`data/gold/gold.jsonl` is the canonical 350-case dataset (300 accepted / 50
+rejected across 7 categories: forwarding, security, qos, sfc, reroute, compound,
+ambiguous_unsupported), using the research schema (e.g. `source_port`,
+`action: "deny"`). `data/gold/gold350_eval.jsonl` is a derived copy in the scoring
+schema (e.g. `dst_port`, `action: "block"`) that `experiments/exp1/score.py` actually
+scores against. `experiments/exp1/convert_gold350.py` is the only thing that may
+regenerate the derived file — never hand-edit `gold350_eval.jsonl`, and never edit
+`gold.jsonl` directly either. `docs/ANNOTATION_GUIDELINE.md` is not just
+documentation — it's the normative spec behind the converter's IP backfilling,
+prompt selector rules, and `topology_eval.json`'s port sets. If you touch the
+prompt, check the guideline; if you touch the guideline, check the prompt.
+
+### Exp-1 reproducibility
+
+Exp-1 reproduces without any LLM calls: raw response logs for cited runs are
+committed under `experiments/exp1/logs/`, so re-running `score.py` against them
+reproduces the paper's numbers in about 2 seconds with zero external dependencies.
+`tests/test_exp1_regression.py` re-scores the committed logs and diffs the result
+against the committed reports in `experiments/exp1/reports/`, failing on any leaf
+mismatch. This is the safety net protecting the paper's numbers — do not let it go
+red across a Stage boundary.
+
+## Hard rules
+
+1. **No prompt strings in code.** `prompts/*.md` is the single source of truth (this
+   applies once Stage 3 lands `prompts/intent_ir.md` / `prompts/direct_flow.md` /
+   `prompts/registry.py`). Violating this has invalidated two prior experiment runs.
+2. **Commit raw logs for any run that's cited.** Don't gitignore
+   `experiments/*/logs/` — losing E1's raw logs once was permanent.
+3. **Never merge to the next Stage with a red regression test**, once Stage 2 is
+   done.
+4. **Never hand-edit `data/gold/gold.jsonl`.** Only `convert_gold350.py` may produce
+   the derived `gold350_eval.jsonl`.
+5. **Don't touch `research/paper/`** (figure-generation code, in the source repos)
+   before the 2026-08-24 deadline.
+6. **Don't delete either source repo** (`sdn-intent-framework`, `sdn-xai-pipeline`).
+7. **The package name is `tiger_sdn`**, matching the repo name. The original IR code
+   uses `sdn_intent` — when it's ported in Stage 4, rename the package and its
+   internal import paths to `tiger_sdn`.
+
+## Known pitfalls (relevant once Stage 4+ starts, details in `docs/plan.md`)
+
+- `gold.jsonl` (canonical) and `gold350_eval.jsonl` (scoring) use different schemas;
+  `convert_gold350.py` is the only bridge between them.
+- `intent_type` and `action` are different axes — `security` intents can carry
+  either `forward` or `block` actions.
+- The research IR's `require_identity` (host XOR ip) is incompatible with GOLD-350;
+  relax it to "at least one."
+- Unspecified fields in gold data are explicit `null` — strip `None` before
+  validating against `extra="forbid"` models.
+- The compiler only reads `waypoints[0]`, so multi-switch SFC chains compile to a
+  single hop. Harmless for Exp-1, a real bug for Exp-2.
+
+## Style
+
+- Python 3.11+. Use `from __future__ import annotations`, type hints, and
+  `pathlib`.
+- Validation via pydantic v2. Core models use `extra="forbid"`.
+- `experiments/exp1/score.py` is stdlib-only — don't add dependencies to it.
+- When porting code from the source repos, leave a comment with the original path;
+  for files that can't hold comments (data, some docs), put the original path in the
+  commit message instead.
+- Don't use `§`, `〃`, `·` in documentation — spell things out instead (e.g. "Stage
+  4.1").
+- Keep commits small — one file and its test per commit.
