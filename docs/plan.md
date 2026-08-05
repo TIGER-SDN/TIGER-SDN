@@ -339,7 +339,26 @@ JSON Schema 자동생성, secret redaction, 동시성에서 연구 트랙이 우
   - 이식 중 `score.py`의 `ROOT` 경로 깊이 계산과 argparse `%` 이스케이프 버그를
     발견해 수정 (원본: `sdn-intent-framework`의
     `research/experiments/eval/score_exp1.py`).
-- [ ] **Stage 3.** 프롬프트 단일 출처화 ← 여기까지 1차 목표
+- [x] **Stage 3.** 프롬프트 단일 출처화 ← 여기까지 1차 목표 (완료, 이슈 #5)
+  - `prompts/intent_ir.md`(T-B/C/D), `prompts/direct_flow.md`(T-A) — `SYSTEM_PROMPT`/
+    `SYSTEM_DIRECT_FLOW` 문자열을 그대로 텍스트만 추출, 내용 변경 없음(과거 커밋된
+    로그/리포트와 무관 — 재실행 없이 포팅만 했으므로 회귀 테스트 영향 없음).
+  - `prompts/registry.py` — `output_format`("direct_flow" | "intent_ir") -> 프롬프트
+    파일 매핑. `experiments/exp1/run.py`가 이걸 통해서만 프롬프트를 읽는다.
+  - `experiments/exp1/run.py` — `research/experiments/eval/run_exp1.py`를 포팅.
+    `SYSTEM_PROMPT`/`SYSTEM_DIRECT_FLOW` 하드코딩 제거, `prompts.registry.get_prompt`
+    사용. `ROOT` 깊이와 `--output` 기본값을 새 레포 경로에 맞게 조정.
+  - `src/tiger_sdn/config.py` — `xai_pipeline/config.py`를 트림. `run.py`가 실제
+    쓰는 LLM 자격증명/엔드포인트(`GOOGLE_API_KEY`, `OPENROUTER_*`, `LLM_*`)만 남기고
+    API 서버/ONOS/데이터셋 경로 폴백은 제거(해당 서브시스템 이식 시 재검토).
+  - `experiments/exp1/config/T-{A,B,C,D}-openrouter.toml`의 `dataset_path`/
+    `topology_path`/`demos_path`를 `research/experiments/eval/data/...`(원본 경로,
+    Stage 2 포팅 시 갱신 누락)에서 `data/gold/...`(이 레포의 실제 경로)로 수정 —
+    `run.py`가 이 값을 그대로 읽어 파일을 여니 안 고치면 동작하지 않았다.
+  - `tests/test_prompt_registry.py` 신규 — registry 대응표 고정, 프롬프트 파일
+    sha256 해시 스냅샷, 코드베이스 전체에서 프롬프트 헤더 문구 리터럴 재등장 여부
+    검사. `pytest` 13개 전부 초록(기존 8개 + 신규 5개).
+  - 완료 기준 충족: 코드베이스 전체에 프롬프트 문자열 리터럴 0건.
 - [ ] **마감 전 병행 작업** (논문 서술, SFC 조사, rep 확대, 라벨 수정)
 - [ ] **KICS 논문 마감 2026-08-24**
 - [ ] **Stage 4.** Intent IR (착수 전 "확인된 사실 1" 해결 필요)
