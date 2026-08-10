@@ -17,17 +17,26 @@ document instead of creating a new one.
 ## Current stage
 
 Stages 0-3 (repo skeleton, GOLD-350 dataset, Exp-1 regression harness, prompt
-unification) are the first milestone, targeting the KICS paper deadline
-(2026-08-24). Only three things affect Exp-1 numbers and should be touched before
-the deadline: the prompt, the scoring logic, and the gold dataset. Stage 4-8 (core
-port: IR, compiler, static verification, digital twin) is deferred until after the
-deadline — see `docs/plan.md` for the full staged plan and known pitfalls per stage.
-`research/paper/` (figure-generation code in the source repos) must not be touched
-before the deadline.
+unification) are complete and stand as the paper's Exp-1 safety net regardless of
+what happens next: it reproduces from committed logs with zero LLM calls, so it
+stays reliable no matter how far core porting gets. Only three things affect Exp-1
+numbers: the prompt, the scoring logic, and the gold dataset.
 
-Before starting Stage 4, resolve this first: verified IR code
-(`sdn-intent-framework`'s `feat/unify-ir` branch, `src/sdn_intent/`, 699 LOC) exists
-only in an uncommitted, unpushed local state — `git clone` cannot retrieve it.
+**As of 2026-08-10, the plan changed:** core porting (Stage 4-8: IR, compiler,
+static verification, digital twin) is no longer deferred until after the KICS
+deadline (2026-08-24) — it proceeds immediately, plus a new Stage 9 (web UI, built
+fresh against the ported core rather than a straight port of `xai_pipeline`'s
+API/UI). The goal is to get the full pipeline working end-to-end, including the web
+UI, and re-run experiments against it. Stage 4 (Intent IR) is done — see
+`docs/plan.md` for per-stage detail and known pitfalls. `research/paper/`
+(figure-generation code in the source repos) still must not be touched before the
+deadline; that rule is independent of the Stage 4-8 timeline change.
+
+The Stage 4 blocker is resolved: the verified IR code
+(`sdn-intent-framework`'s `feat/unify-ir` branch, `src/sdn_intent/`, 699 LOC) was
+never pushed or committed upstream, but it was still sitting, untracked, in that
+repo's local working tree — it was read from there and ported (never committed to
+the source repo) into `src/tiger_sdn/ir/`.
 
 ## Commands
 
