@@ -361,7 +361,23 @@ JSON Schema 자동생성, secret redaction, 동시성에서 연구 트랙이 우
   - 완료 기준 충족: 코드베이스 전체에 프롬프트 문자열 리터럴 0건.
 - [ ] **마감 전 병행 작업** (논문 서술, SFC 조사, rep 확대, 라벨 수정)
 - [ ] **KICS 논문 마감 2026-08-24**
-- [ ] **Stage 4.** Intent IR (착수 전 "확인된 사실 1" 해결 필요)
+- [x] **Stage 4.** Intent IR
+  - "확인된 사실 1" 해결: `feat/unify-ir` 브랜치의 미커밋 `src/sdn_intent/`가
+    실제로는 로컬 워킹 디렉토리에 그대로 남아 있었다(삭제되지 않음). 원본
+    레포에는 쓰지 않는다는 규율에 따라 커밋/푸시하지 않고, 파일 내용을 그대로
+    읽어 `src/tiger_sdn/ir/`로 포팅했다 — `sdn_intent` -> `tiger_sdn` 패키지명
+    변경 외 내용 변경 없음.
+  - `model.py`/`prediction.py`/`adapter.py`/`ir/__init__.py`를 이식. 알려진
+    함정(require_identity 완화, intent_type/action 2축 분리, egress_port 문자열
+    정규화, SFC waypoints 매핑, None 필드 제거)은 원본 코드에 이미 반영되어
+    있었음을 확인.
+  - `tests/test_ir_gold350.py` 신규 — accepted 300건 전량 로드 실패 0, rejected
+    50건 로드 실패 0, 연구 스키마 왕복 변환 무손실(egress_port str->int, ip에
+    /32 부착 두 정규화 제외 완전 일치) 확인. `pytest` 17개 전부 초록(기존 13개
+    + 신규 4개).
+  - 완료 기준 충족: accepted 300건 전량 로드, 실패 0.
+  - 미이식: 컴파일러/검증기/twin(Stage 5-7)에서 IR을 실제로 소비하는 지점 —
+    IR 계층 자체의 포팅과 검증만 이번 범위.
 - [ ] **Stage 5.** 컴파일러
 - [ ] **Stage 6.** 정적 검증
 - [ ] **Stage 7.** Digital Twin
