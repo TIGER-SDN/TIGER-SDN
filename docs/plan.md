@@ -473,7 +473,43 @@ JSON Schema 자동생성, secret redaction, 동시성에서 연구 트랙이 우
   - `tests/test_compiler_gold350.py` 신규 — accepted 300건 컴파일 에러 0
     포함 7개 테스트. `pytest` 24개 전부 초록(기존 17개 + 신규 7개).
   - 완료 기준 충족: gold accepted 300건이 컴파일 에러 없이 통과.
-- [ ] **Stage 6.** 정적 검증
+- [x] **Stage 6.** 정적 검증 (2축 병합, 이슈 #13)
+  - 대체가 아니라 병합: `stage3_static/{schema_validator,conflict_detector,
+    static_validator}.py`(ONOS FlowRule 스키마 + 5종 충돌 탐지, 컴파일 후
+    단계)와 `research/safe_intent_sdn/validator.py`의 `TopologyInventory`
+    그라운딩(컴파일 전, IR 단계)을 각각 `src/tiger_sdn/verify/`로 포팅해
+    한 패키지에 담았다 — 파이프라인상 두 게이트가 서로 다른 시점(IR 단계 vs
+    FlowRule 단계)에서 돈다는 점은 그대로 유지.
+  - `verify/{topology,grounding,schema,conflict,static}.py` 신규.
+    `grounding.py`는 research의 필드 이름(`ingress_port`/`source_port`/
+    `destination_port`/`enforcement.avoid_device`)을 통합 IR의 이름
+    (`in_port`/`src_port`/`dst_port`/`routing.avoid_device`)에 맞춰 옮겼다.
+    `_check_path_constraints`(program 레벨 `sfc_chain`)는 포팅하지 않음 —
+    통합 IR은 SFC 웨이포인트를 규칙별 `enforcement`/`sfc_role`로 이미
+    펼쳐 놓으므로 그 개념 자체가 없다(Stage 5 컴파일러 절 참고).
+  - "함께 처리" 3건 모두 반영:
+    1. compound 내부 충돌 검사(`static.py`)가 IPV4_SRC/IPV4_DST를 딕셔너리
+       완전 일치로만 비교하던 것을 외부 탐지와 같은 `conflict.ip_overlaps`로
+       통일 — `10.0.0.0/24`와 `10.0.0.5/32`처럼 문자열은 다르지만 실제로
+       겹치는 CIDR 쌍을 이제 잡는다.
+    2. `enforcement.device` 미지정 시 컴파일러가 조용히 기본 스위치로
+       폴백하던 것(Stage 5)을 정적 검증에서는 `missing_device`로 명시
+       거부하도록 통일 — `grounding._check_references`에 추가.
+    3. `schema_validator`/`conflict_detector`/`static_validator`/
+       `validator.py` 넷 다 원본에 테스트가 0개였다 —
+       `tests/test_verify_gold350.py` 신규로 전부 커버.
+  - 이식 중 발견해 함께 고친 버그: `static._check_intra_conflicts`가
+    `f.get("treatment", {}).get(...)`로 action을 읽었는데, block 규칙은
+    `treatment` 키는 있지만 값이 `None`이라 `AttributeError`로 죽었다 —
+    정확히 forward-vs-block 상반 액션을 잡으려는 검사가 block 규칙 자체에서
+    크래시하는 셈이었다. `(f.get("treatment") or {})`로 수정.
+  - `tests/test_verify_gold350.py` 신규 — 미지 host/ip/device 거부,
+    device 미지정 명시 거부(GOLD-350 accepted의 실제 enforcement-누락 규칙
+    포함), egress_port 범위 초과 거부, shadowed_rule 충돌, FlowRule 스키마
+    검증, 5종 충돌 탐지 각각, compound CIDR 겹침 버그 재현 20개.
+    `pytest` 42개 전부 초록(기존 24개 + 신규 18개).
+  - 완료 기준 충족: 그라운딩 검증(`verify_program`)이 미지 host/ip/device를
+    거부.
 - [ ] **Stage 7.** Digital Twin
 - [ ] **Stage 8.** Exp-2 (최종)
 - [ ] **Stage 9.** 웹 UI (신규)
