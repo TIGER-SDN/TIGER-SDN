@@ -54,7 +54,31 @@ Exp-1이 실제로 채점하는 건 파생본이므로, **정본만 옮기면 �
 
 그래서 **Stage 0-3(레포 골격, 데이터셋, 회귀 하네스, 프롬프트 단일화)은 위 세 가지만
 다루므로 마감 전에 끝낼 수 있고, 끝내는 편이 좋다.** Stage 4-8(코어 이식)은 마감 전
-수치와 무관하므로 마감 이후로 미뤄도 안전하다.
+수치와 무관하므로 마감 이후로 미뤄도 안전하다 — **였으나 아래 "2026-08-10 방향 전환"
+참고.**
+
+---
+
+## 2026-08-10 방향 전환
+
+Stage 0-3 완료로 Exp-1 안전망(LLM 호출 없이 커밋된 로그로 재현)은 이미 확보됐다.
+이 안전망은 이후 어떤 일이 있어도 그대로 유지된다 — Exp-1 수치를 움직이는 건 여전히
+프롬프트/채점 로직/gold 데이터셋 셋뿐이다.
+
+여기에 더해, **마감(2026-08-24)과 무관하게 지금부터 코어 전체(Stage 4-8) +
+신규 웹 UI(Stage 9)를 이어서 이식한다.** 목표는 파이프라인을 웹 UI까지 포함해
+end-to-end로 동작시킨 뒤, 그 위에서 실험을 다시 진행하는 것이다. 더 이상
+"마감 전엔 코어에 손대지 않는다"는 전제로 순서를 짜지 않는다.
+
+- **Stage 4(Intent IR)는 이미 완료.** "확인된 사실 1"의 블로커(`feat/unify-ir`의
+  미커밋 IR 코드)는 실제로는 로컬 워킹 디렉토리에 그대로 남아 있어서, 원본 레포에
+  쓰지 않고 그 자리에서 읽어 포팅하는 것으로 해결됐다.
+- **Stage 9(웹 UI)를 신규로 추가한다.** 기존 "이식하지 않는 것" 표에 있던
+  `xai_pipeline/api.py` + UI는 참고용으로만 보고, TIGER-SDN 구조에 맞게 새로
+  설계한다 — 그대로 이식하지 않는다.
+- **바뀌지 않는 것:** `research/paper/`는 마감 전에 손대지 않는다(이 규율은
+  Stage 4-8 일정 변경과 무관하게 유지). "마감 전 병행 작업"(이슈 #6-10)은 우선순위가
+  아니지만 여전히 열려 있고, 코어 이식과 병행해도 무방하다.
 
 ---
 
@@ -86,7 +110,7 @@ TIGER-SDN/
 │
 ├── src/tiger_sdn/
 │   ├── config.py
-│   ├── ir/                      Stage 4
+│   ├── ir/                      Stage 4 (완료)
 │   ├── compile/                 Stage 5
 │   ├── verify/                  Stage 6
 │   ├── twin/                    Stage 7
@@ -95,6 +119,8 @@ TIGER-SDN/
 │   ├── parse/, orchestrate/pipeline.py  Stage 8
 │   ├── explain/, deploy/        장기 보류
 │   └── py.typed
+│
+├── (웹 UI 디렉토리, 위치 미정 — Stage 9 착수 시 결정)
 │
 └── tests/
 ```
@@ -223,7 +249,7 @@ TIGER-SDN/
 
 ---
 
-## Stage 4-8. 코어 이식 (마감 이후 권장)
+## Stage 4-8. 코어 이식 + Stage 9. 웹 UI (2026-08-10부터 마감 무관하게 즉시 진행)
 
 ### Stage 4. Intent IR
 
@@ -286,6 +312,20 @@ TIGER-SDN/
 
 **완료 기준:** 파싱/컴파일/검증 통과율 리포트 생성.
 
+### Stage 9. 웹 UI (신규, 2026-08-10 결정)
+
+이식한 파이프라인(IR → 컴파일러 → 검증기 → twin)을 자연어 인텐트 입력부터 결과
+확인까지 브라우저에서 조작할 수 있게 하는 계층. `src/xai_pipeline/api.py` + 기존
+프론트엔드는 **그대로 이식하지 않는다** — 참고용으로만 보고 TIGER-SDN 구조(특히
+`IntentPrediction`/`IntentProgram` 스키마, `runctx` 로깅)에 맞게 새로 설계한다.
+
+착수 전 결정 필요: 프레임워크 선택, API와 UI를 같은 레포에 둘지 분리할지,
+배포 백엔드(`backends/onos.py`)와의 연결 방식. 착수 시점에 이 문서에 세부 계획을
+채운다.
+
+**완료 기준:** 자연어 인텐트를 입력해 accepted/rejected 결과와 (accepted인 경우)
+컴파일된 FlowRule을 웹 UI에서 확인할 수 있다.
+
 ### 실행 로깅 (Stage 2 직후 착수해도 무방)
 
 `research/safe_intent_sdn/run_context.py` + `schema.py`가 이 영역의 정본이다 -
@@ -298,7 +338,7 @@ JSON Schema 자동생성, secret redaction, 동시성에서 연구 트랙이 우
 
 | 원본 | 이유 |
 |---|---|
-| `src/xai_pipeline/api.py` + UI | 논문 정량 결과와 무관 |
+| `src/xai_pipeline/api.py` + UI | 그대로 이식은 안 함 — Stage 9에서 참고용으로만 보고 신규 설계 (2026-08-10 전: 논문 정량 결과와 무관하다는 이유로 완전 제외였으나, 방향 전환으로 Stage 9가 신설되며 "참고" 상태로 바뀜) |
 | `src/xai_pipeline/main.py` | Repair Loop만 승격, 나머지 버림 |
 | `src/xai_pipeline/evaluate.py` | Exp-1/Exp-2가 대체 |
 | `stage5_xai/explainer.py`, `stage6_deploy/deployer.py` | `explain/`/`deploy/` 자리는 목표 구조에 있으나 장기 보류 |
@@ -359,7 +399,8 @@ JSON Schema 자동생성, secret redaction, 동시성에서 연구 트랙이 우
     sha256 해시 스냅샷, 코드베이스 전체에서 프롬프트 헤더 문구 리터럴 재등장 여부
     검사. `pytest` 13개 전부 초록(기존 8개 + 신규 5개).
   - 완료 기준 충족: 코드베이스 전체에 프롬프트 문자열 리터럴 0건.
-- [ ] **마감 전 병행 작업** (논문 서술, SFC 조사, rep 확대, 라벨 수정)
+- [ ] **마감 전 병행 작업** (논문 서술, SFC 조사, rep 확대, 라벨 수정) — 우선순위
+  아님(2026-08-10 방향 전환), 코어 이식과 병행 가능
 - [ ] **KICS 논문 마감 2026-08-24**
 - [x] **Stage 4.** Intent IR
   - "확인된 사실 1" 해결: `feat/unify-ir` 브랜치의 미커밋 `src/sdn_intent/`가
@@ -382,4 +423,6 @@ JSON Schema 자동생성, secret redaction, 동시성에서 연구 트랙이 우
 - [ ] **Stage 6.** 정적 검증
 - [ ] **Stage 7.** Digital Twin
 - [ ] **Stage 8.** Exp-2 (최종)
+- [ ] **Stage 9.** 웹 UI (신규)
 - [ ] **실행 로깅**
+- [ ] **전체 이식 완료 후 실험 재진행** (범위/일정 미정)
