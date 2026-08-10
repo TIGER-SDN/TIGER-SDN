@@ -87,7 +87,7 @@ TIGER-SDN/
 ├── src/tiger_sdn/
 │   ├── config.py
 │   ├── ir/                      Stage 4
-│   ├── compile/                 Stage 5
+│   ├── compile/                 Stage 5 (완료)
 │   ├── verify/                  Stage 6
 │   ├── twin/                    Stage 7
 │   ├── backends/onos.py         Stage 5-7 (배포 백엔드로 격리)
@@ -246,16 +246,53 @@ TIGER-SDN/
 
 **완료 기준:** accepted 300건 전량 로드, 실패 0.
 
-### Stage 5. 컴파일러
+### Stage 5. 컴파일러 (완료)
 
-베이스: `src/xai_pipeline/pipeline/stage2_flowrule/compiler.py`(340 LOC).
-흡수: `research/safe_intent_sdn/compiler.py`의 `CompilationError`.
+계획 당시엔 "베이스: `xai_pipeline`의 `stage2_flowrule/compiler.py`, 흡수:
+`research`의 `CompilationError`"로 적었지만, 실제 착수해보니 두 원본을 그대로
+쓸 수 없어서 통합 IR(`tiger_sdn.ir`)에 맞춰 새로 조합했다 — 아래 "직접 포팅이
+아닌 이유" 참고. 산출물: `src/tiger_sdn/compile/{onos.py,compiler.py,__init__.py}`.
 
-> **미해결 버그.** 컴파일러가 `waypoints[0]`만 사용해 multi-switch SFC 체인을 단일
-> 홉만 컴파일한다(10건). Exp-1엔 무해하지만 Exp-2에서는 버그다. 여기서 고치거나
-> 최소 실패 테스트로 남긴다.
+**직접 포팅이 아닌 이유.** `research/safe_intent_sdn/compiler.py`는
+`enforcement.device`와 `qos.queue`가 없으면 무조건 `CompilationError`를 던지는데,
+실제 GOLD-350 accepted 408규칙을 세어보니 **217건(53%)이 `enforcement` 자체가
+없고, qos 50건 중 49건이 `queue` 없이 `min_bandwidth_mbps`만 갖는다** — 배치
+(device/port)와 큐 프로비저닝은 애초에 이 Intent IR이 표현하는 범위 밖이고,
+annotator가 "무엇을 할지"만 판정하고 "어디서"는 의도적으로 비워 뒀다. research
+컴파일러를 그대로 쓰면 완료 기준(accepted 300건 무오류)을 채울 수 없다. 그래서
+`xai_pipeline`의 관대한 폴백(device 미지정 -> "switch 1", egress_port 미지정 ->
+ONOS 예약 포트 "NORMAL", qos.queue 미지정 시 QUEUE 명령어 생략)을 기본으로
+채택했다. 이 폴백을 명시적 거부로 바꾸는 일은 원래 계획대로 **Stage 6의 몫으로
+남긴다**(정적 검증기가 컴파일 전에 배치 누락을 거부해야 한다는 뜻 — 컴파일러
+자체의 관대함은 그대로 둔다).
 
-**완료 기준:** gold accepted 300건이 컴파일 에러 없이 통과.
+`CompilationError`(원래 `xai_pipeline` 쪽은 `CompileError`)라는 이름과, host->ip
+엔드포인트 해석 + eth_type/IP 버전 정합성 검사는 `research/safe_intent_sdn/compiler.py`
+쪽에서 그대로 흡수했다 — 애초 계획의 "흡수" 대상이 정확히 이 부분이었다.
+
+**미해결 버그였던 것 — 재현되지 않음으로 판명.** "컴파일러가 `waypoints[0]`만
+사용해 multi-switch SFC 체인을 단일 홉만 컴파일한다"는 원래 `xai_pipeline`
+컴파일러가 구 플랫 스키마(`waypoints`+`alt_out_port` 압축 표현) 위에서 겪던
+버그다. GOLD-350(`from_research()` 경로)에서는 이 합성이 아예 필요 없다 —
+N홉 체인을 컴파일러가 아니라 **annotator가 이미 N개의 개별 규칙으로 펼쳐
+놓았다**(`sfc_role`: ingress/transit/egress, 각자 자기 몫의 `enforcement.device`/
+`egress_port`를 직접 보유). 그래서 sfc/reroute 규칙은 forward와 완전히 동일한
+경로로 컴파일되고, `routing.waypoints`는 컴파일에 안 쓰이는 설명용 메타데이터로
+남는다 — 버그를 "고쳤다"기보다 IR 설계상 재현되지 않는다.
+
+**미지원 범위(의도적, 문서화됨):** `enforcement.alt_egress_port`(하나의 규칙
+안에 waypoint 포트 + 최종 egress 포트를 압축해 담는 `from_gold350()` 스타일
+표현)는 아직 다루지 않는다 — GOLD-350 accepted 300건은 전부 `from_research()`
+경로라 이 필드를 쓰지 않는다. `from_gold350()` 경로를 실제로 쓰게 되면
+(Exp-2/Stage 8에서 제품 스키마 직접 소비가 필요해지면) 그때 확장한다.
+
+**신규:** `tests/test_compiler_gold350.py` — accepted 300건 컴파일 에러 0,
+거부된 예측 컴파일 시 에러, block 규칙에 treatment 없음, `enforcement` 완전
+누락 시 기본 device/NORMAL 포트 폴백, device_hint 자연어 파싱, compound
+규칙의 순서->우선순위 보존(먼저 나온 더 구체적인 규칙이 더 높은 우선순위) 확인.
+`pytest` 24개 전부 초록(기존 17개 + 신규 7개).
+
+**완료 기준 충족:** gold accepted 300건이 컴파일 에러 없이 통과.
 
 ### Stage 6. 정적 검증 (2축 병합)
 
@@ -378,7 +415,23 @@ JSON Schema 자동생성, secret redaction, 동시성에서 연구 트랙이 우
   - 완료 기준 충족: accepted 300건 전량 로드, 실패 0.
   - 미이식: 컴파일러/검증기/twin(Stage 5-7)에서 IR을 실제로 소비하는 지점 —
     IR 계층 자체의 포팅과 검증만 이번 범위.
-- [ ] **Stage 5.** 컴파일러
+- [x] **Stage 5.** 컴파일러
+  - 계획 당시 "베이스"였던 `xai_pipeline` 컴파일러를 직접 포팅하지 않고
+    `research/safe_intent_sdn/compiler.py`의 설계와 통합해 새로 작성 — 실제
+    GOLD-350을 세어보니 accepted 408규칙 중 217건(53%)이 `enforcement` 자체가
+    없어 research 쪽의 엄격한 필수 요구를 그대로 쓰면 완료 기준을 채울 수
+    없었다. 상세 이유는 Stage 5 절 "직접 포팅이 아닌 이유" 참고.
+  - `src/tiger_sdn/compile/{onos.py,compiler.py,__init__.py}` 신규.
+    `CompilationError`, host->ip 엔드포인트 해석은 research에서 흡수.
+    device/egress_port 미지정 시 관대한 폴백(switch 1 / NORMAL 포트)은
+    xai_pipeline에서 흡수 — 명시적 거부로 바꾸는 일은 Stage 6으로 위임.
+  - "미해결 버그"(`waypoints[0]`만 써서 multi-switch SFC가 단일 홉으로
+    뭉개짐)는 GOLD-350의 `from_research()` 경로에서 애초에 재현되지 않음을
+    확인 — N홉 체인이 컴파일러가 아니라 IR 단계에서 이미 N개 규칙으로
+    펼쳐져 있다.
+  - `tests/test_compiler_gold350.py` 신규 — accepted 300건 컴파일 에러 0
+    포함 7개 테스트. `pytest` 24개 전부 초록(기존 17개 + 신규 7개).
+  - 완료 기준 충족: gold accepted 300건이 컴파일 에러 없이 통과.
 - [ ] **Stage 6.** 정적 검증
 - [ ] **Stage 7.** Digital Twin
 - [ ] **Stage 8.** Exp-2 (최종)
