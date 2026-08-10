@@ -28,6 +28,13 @@ def _compile(rules: list[dict]):
     return compile_prediction(prediction, endpoint_ips=ENDPOINT_IPS)
 
 
+# Both cases target h1<->h4. The default diamond topology's regression check
+# (twin.topology.get_test_host_pairs) hardcodes h2<->h3 as the "unrelated"
+# pair that must stay reachable regardless of what's under test -- a case
+# that targets h2/h3 itself makes that check spuriously fail (observed live:
+# a block h2->h3 case correctly blocked traffic, intent_check=True, but
+# regression=False because the framework expected h2<->h3 to still be
+# reachable). Stick to h1<->h4 here to stay clear of that reserved pair.
 CASES = {
     "forward h1->h4": _compile(
         [
@@ -38,12 +45,12 @@ CASES = {
             }
         ]
     ),
-    "block h2->h3": _compile(
+    "block h1->h4": _compile(
         [
             {
                 "intent_type": "security",
                 "action": "deny",
-                "selector": {"source": {"host": "h2"}, "destination": {"host": "h3"}},
+                "selector": {"source": {"host": "h1"}, "destination": {"host": "h4"}},
             }
         ]
     ),
