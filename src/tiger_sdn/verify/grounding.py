@@ -131,9 +131,22 @@ def _check_feasibility(program: IntentProgram, inventory: TopologyInventory) -> 
     return findings
 
 
+# compile/compiler.py의 compile_prediction 기본값과 맞춰야 한다 — priority가 없는
+# 규칙은 인덱스가 빠를수록 높은 priority를 받는다(priority_start부터 priority_step씩 감소).
+_DEFAULT_PRIORITY_START = 40000
+_DEFAULT_PRIORITY_STEP = 1
+
+
+def _effective_priority(index: int, rule: IntentRule) -> int:
+    if rule.priority is not None:
+        return rule.priority
+    return _DEFAULT_PRIORITY_START - index * _DEFAULT_PRIORITY_STEP
+
+
 def _check_conflicts(program: IntentProgram, inventory: TopologyInventory) -> list[ValidationFinding]:
     findings: list[ValidationFinding] = []
     rules = program.rules
+    priorities = [_effective_priority(index, rule) for index, rule in enumerate(rules)]
     for i in range(len(rules)):
         device_i = _device_of(rules[i], inventory)
         if device_i is None:
@@ -143,11 +156,14 @@ def _check_conflicts(program: IntentProgram, inventory: TopologyInventory) -> li
                 continue
             if _device_of(rules[j], inventory) != device_i:
                 continue
-            if _selector_covers(rules[i].selector, rules[j].selector, inventory.aliases):
+            # 인덱스가 아니라 컴파일러가 실제로 부여할 priority로 우열을 가린다 —
+            # 명시적 rule.priority가 인덱스 순서를 뒤집을 수 있다.
+            higher, lower = (i, j) if priorities[i] >= priorities[j] else (j, i)
+            if _selector_covers(rules[higher].selector, rules[lower].selector, inventory.aliases):
                 findings.append(
                     ValidationFinding(
-                        category="conflict", code="shadowed_rule", rule_indices=[i, j],
-                        message=f"rule {j} is shadowed by higher-priority rule {i} with a different action",
+                        category="conflict", code="shadowed_rule", rule_indices=[higher, lower],
+                        message=f"rule {lower} is shadowed by higher-priority rule {higher} with a different action",
                     )
                 )
     return findings

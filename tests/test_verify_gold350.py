@@ -167,6 +167,28 @@ def test_verify_program_detects_shadowed_rule(inventory: TopologyInventory):
     assert any(f.code == "shadowed_rule" and f.rule_indices == [0, 1] for f in report.findings)
 
 
+def test_verify_program_shadowed_rule_respects_explicit_priority_over_index(inventory: TopologyInventory):
+    """rule.priority가 명시되면 인덱스가 아니라 그 값이 우열을 가른다 — 인덱스상
+    나중에 오는 규칙이라도 더 높은 priority를 받으면 이긴다(컴파일러와 동일 규칙)."""
+    general = IntentRule(
+        action="block",
+        priority=100,
+        selector=IntentSelector(source={"host": "h1"}, destination={"host": "h2"}),
+        enforcement=IntentEnforcement(device="s1"),
+    )
+    specific = IntentRule(
+        action="forward",
+        priority=200,
+        selector=IntentSelector(
+            source={"host": "h1"}, destination={"host": "h2"}, protocol="tcp", dst_port=22
+        ),
+        enforcement=IntentEnforcement(device="s1"),
+    )
+    program = IntentProgram(rules=[general, specific])
+    report = verify_program(program, inventory)
+    assert not any(f.code == "shadowed_rule" for f in report.findings)
+
+
 # ── FlowRule 스키마 검증 ──────────────────────────────────────────────
 
 
