@@ -41,12 +41,13 @@ doctor_report() {
   check_command curl 'curl --version'
   check_command iperf3 'iperf3 --version'
   check_command ss 'ss --version'
-  if [[ -x "${PROJECT_ROOT}/.venv/bin/python" ]]; then
+  local venv_python="${UV_PROJECT_ENVIRONMENT:-${PROJECT_ROOT}/.venv}/bin/python"
+  if [[ -x "$venv_python" ]]; then
     local project_python
-    project_python="$("${PROJECT_ROOT}/.venv/bin/python" --version 2>&1)"
-    if [[ "$project_python" == 'Python 3.11.'* ]]; then printf 'PASS  %-18s %s\n' project-python "$project_python";
+    project_python="$("$venv_python" --version 2>&1)"
+    if [[ "$project_python" == 'Python 3.11.'* ]]; then printf 'PASS  %-18s %s (%s)\n' project-python "$project_python" "$venv_python";
     else printf 'FAIL  %-18s %s (expected Python 3.11.x)\n' project-python "$project_python"; failures=$((failures + 1)); fi
-  else printf 'FAIL  %-18s .venv not found\n' project-python; failures=$((failures + 1)); fi
+  else printf 'FAIL  %-18s venv not found at %s (set UV_PROJECT_ENVIRONMENT if it lives outside the repo)\n' project-python "$venv_python"; failures=$((failures + 1)); fi
   printf '\nServices and ONOS\n'
   check_service openvswitch-switch
   check_service docker

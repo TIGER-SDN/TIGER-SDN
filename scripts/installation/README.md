@@ -21,6 +21,21 @@ ONOS 하나만 컨테이너화하는 편이 원본 레포에서도 검증된 방
   Docker Desktop을 먼저 켜 둔다 (daemon이 없으면 `docker info`가 실패한다)
 - Git과 `curl`
 
+### 저장소가 Windows 파일시스템(`/mnt/c/...`)에 있는 WSL2라면
+
+`uv sync`가 만드는 `.venv`는 OS별 바이너리를 담기 때문에, 저장소 경로를
+그대로 두고 WSL 쪽에서도 `uv sync`를 돌리면 Windows에서 이미 만든 `.venv`를
+Linux 바이너리로 덮어써 Windows 쪽 개발 환경이 깨집니다. WSL의 네이티브
+파일시스템(예: `$HOME`)에 별도 venv를 두도록 지정하세요.
+
+```bash
+export UV_PROJECT_ENVIRONMENT="$HOME/.venvs/tiger-sdn"
+```
+
+이 값을 export한 채로 `setup.sh`(및 이후의 `uv run`/`uv sync`)를 실행하면
+`doctor.sh`도 이 경로를 인식합니다. `/mnt/c` 위 I/O가 WSL 네이티브 파일시스템보다
+느리기도 해서 venv를 밖에 두면 그 이점도 같이 얻습니다.
+
 ## 설치
 
 저장소를 받은 뒤 프로젝트 루트에서 설치 스크립트를 실행합니다.
