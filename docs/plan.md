@@ -54,7 +54,31 @@ Exp-1이 실제로 채점하는 건 파생본이므로, **정본만 옮기면 �
 
 그래서 **Stage 0-3(레포 골격, 데이터셋, 회귀 하네스, 프롬프트 단일화)은 위 세 가지만
 다루므로 마감 전에 끝낼 수 있고, 끝내는 편이 좋다.** Stage 4-8(코어 이식)은 마감 전
-수치와 무관하므로 마감 이후로 미뤄도 안전하다.
+수치와 무관하므로 마감 이후로 미뤄도 안전하다 — **였으나 아래 "2026-08-10 방향 전환"
+참고.**
+
+---
+
+## 2026-08-10 방향 전환
+
+Stage 0-3 완료로 Exp-1 안전망(LLM 호출 없이 커밋된 로그로 재현)은 이미 확보됐다.
+이 안전망은 이후 어떤 일이 있어도 그대로 유지된다 — Exp-1 수치를 움직이는 건 여전히
+프롬프트/채점 로직/gold 데이터셋 셋뿐이다.
+
+여기에 더해, **마감(2026-08-24)과 무관하게 지금부터 코어 전체(Stage 4-8) +
+신규 웹 UI(Stage 9)를 이어서 이식한다.** 목표는 파이프라인을 웹 UI까지 포함해
+end-to-end로 동작시킨 뒤, 그 위에서 실험을 다시 진행하는 것이다. 더 이상
+"마감 전엔 코어에 손대지 않는다"는 전제로 순서를 짜지 않는다.
+
+- **Stage 4(Intent IR)는 이미 완료.** "확인된 사실 1"의 블로커(`feat/unify-ir`의
+  미커밋 IR 코드)는 실제로는 로컬 워킹 디렉토리에 그대로 남아 있어서, 원본 레포에
+  쓰지 않고 그 자리에서 읽어 포팅하는 것으로 해결됐다.
+- **Stage 9(웹 UI)를 신규로 추가한다.** 기존 "이식하지 않는 것" 표에 있던
+  `xai_pipeline/api.py` + UI는 참고용으로만 보고, TIGER-SDN 구조에 맞게 새로
+  설계한다 — 그대로 이식하지 않는다.
+- **바뀌지 않는 것:** `research/paper/`는 마감 전에 손대지 않는다(이 규율은
+  Stage 4-8 일정 변경과 무관하게 유지). "마감 전 병행 작업"(이슈 #6-10)은 우선순위가
+  아니지만 여전히 열려 있고, 코어 이식과 병행해도 무방하다.
 
 ---
 
@@ -86,8 +110,8 @@ TIGER-SDN/
 │
 ├── src/tiger_sdn/
 │   ├── config.py
-│   ├── ir/                      Stage 4
-│   ├── compile/                 Stage 5 (완료)
+│   ├── ir/                      Stage 4 (완료)
+│   ├── compile/                 Stage 5
 │   ├── verify/                  Stage 6
 │   ├── twin/                    Stage 7
 │   ├── backends/onos.py         Stage 5-7 (배포 백엔드로 격리)
@@ -95,6 +119,8 @@ TIGER-SDN/
 │   ├── parse/, orchestrate/pipeline.py  Stage 8
 │   ├── explain/, deploy/        장기 보류
 │   └── py.typed
+│
+├── (웹 UI 디렉토리, 위치 미정 — Stage 9 착수 시 결정)
 │
 └── tests/
 ```
@@ -223,7 +249,7 @@ TIGER-SDN/
 
 ---
 
-## Stage 4-8. 코어 이식 (마감 이후 권장)
+## Stage 4-8. 코어 이식 + Stage 9. 웹 UI (2026-08-10부터 마감 무관하게 즉시 진행)
 
 ### Stage 4. Intent IR
 
@@ -328,6 +354,20 @@ traffic_generator.py, bandwidth.py) + `onos_client.py`가 더 완성도 높은
 
 **완료 기준:** 파싱/컴파일/검증 통과율 리포트 생성.
 
+### Stage 9. 웹 UI (신규, 2026-08-10 결정)
+
+이식한 파이프라인(IR → 컴파일러 → 검증기 → twin)을 자연어 인텐트 입력부터 결과
+확인까지 브라우저에서 조작할 수 있게 하는 계층. `src/xai_pipeline/api.py` + 기존
+프론트엔드는 **그대로 이식하지 않는다** — 참고용으로만 보고 TIGER-SDN 구조(특히
+`IntentPrediction`/`IntentProgram` 스키마, `runctx` 로깅)에 맞게 새로 설계한다.
+
+착수 전 결정 필요: 프레임워크 선택, API와 UI를 같은 레포에 둘지 분리할지,
+배포 백엔드(`backends/onos.py`)와의 연결 방식. 착수 시점에 이 문서에 세부 계획을
+채운다.
+
+**완료 기준:** 자연어 인텐트를 입력해 accepted/rejected 결과와 (accepted인 경우)
+컴파일된 FlowRule을 웹 UI에서 확인할 수 있다.
+
 ### 실행 로깅 (Stage 2 직후 착수해도 무방)
 
 `research/safe_intent_sdn/run_context.py` + `schema.py`가 이 영역의 정본이다 -
@@ -340,7 +380,7 @@ JSON Schema 자동생성, secret redaction, 동시성에서 연구 트랙이 우
 
 | 원본 | 이유 |
 |---|---|
-| `src/xai_pipeline/api.py` + UI | 논문 정량 결과와 무관 |
+| `src/xai_pipeline/api.py` + UI | 그대로 이식은 안 함 — Stage 9에서 참고용으로만 보고 신규 설계 (2026-08-10 전: 논문 정량 결과와 무관하다는 이유로 완전 제외였으나, 방향 전환으로 Stage 9가 신설되며 "참고" 상태로 바뀜) |
 | `src/xai_pipeline/main.py` | Repair Loop만 승격, 나머지 버림 |
 | `src/xai_pipeline/evaluate.py` | Exp-1/Exp-2가 대체 |
 | `stage5_xai/explainer.py`, `stage6_deploy/deployer.py` | `explain/`/`deploy/` 자리는 목표 구조에 있으나 장기 보류 |
@@ -401,7 +441,8 @@ JSON Schema 자동생성, secret redaction, 동시성에서 연구 트랙이 우
     sha256 해시 스냅샷, 코드베이스 전체에서 프롬프트 헤더 문구 리터럴 재등장 여부
     검사. `pytest` 13개 전부 초록(기존 8개 + 신규 5개).
   - 완료 기준 충족: 코드베이스 전체에 프롬프트 문자열 리터럴 0건.
-- [ ] **마감 전 병행 작업** (논문 서술, SFC 조사, rep 확대, 라벨 수정)
+- [ ] **마감 전 병행 작업** (논문 서술, SFC 조사, rep 확대, 라벨 수정) — 우선순위
+  아님(2026-08-10 방향 전환), 코어 이식과 병행 가능
 - [ ] **KICS 논문 마감 2026-08-24**
 - [x] **Stage 4.** Intent IR
   - "확인된 사실 1" 해결: `feat/unify-ir` 브랜치의 미커밋 `src/sdn_intent/`가
@@ -437,7 +478,51 @@ JSON Schema 자동생성, secret redaction, 동시성에서 연구 트랙이 우
   - `tests/test_compiler_gold350.py` 신규 — accepted 300건 컴파일 에러 0
     포함 7개 테스트. `pytest` 24개 전부 초록(기존 17개 + 신규 7개).
   - 완료 기준 충족: gold accepted 300건이 컴파일 에러 없이 통과.
-- [ ] **Stage 6.** 정적 검증
+- [x] **Stage 6.** 정적 검증 (2축 병합, 이슈 #13)
+  - 대체가 아니라 병합: `stage3_static/{schema_validator,conflict_detector,
+    static_validator}.py`(ONOS FlowRule 스키마 + 5종 충돌 탐지, 컴파일 후
+    단계)와 `research/safe_intent_sdn/validator.py`의 `TopologyInventory`
+    그라운딩(컴파일 전, IR 단계)을 각각 `src/tiger_sdn/verify/`로 포팅해
+    한 패키지에 담았다 — 파이프라인상 두 게이트가 서로 다른 시점(IR 단계 vs
+    FlowRule 단계)에서 돈다는 점은 그대로 유지.
+  - `verify/{topology,grounding,schema,conflict,static}.py` 신규.
+    `grounding.py`는 research의 필드 이름(`ingress_port`/`source_port`/
+    `destination_port`/`enforcement.avoid_device`)을 통합 IR의 이름
+    (`in_port`/`src_port`/`dst_port`/`routing.avoid_device`)에 맞춰 옮겼다.
+    `_check_path_constraints`(program 레벨 `sfc_chain`)는 포팅하지 않음 —
+    통합 IR은 SFC 웨이포인트를 규칙별 `enforcement`/`sfc_role`로 이미
+    펼쳐 놓으므로 그 개념 자체가 없다(Stage 5 컴파일러 절 참고).
+  - "함께 처리" 3건 모두 반영:
+    1. compound 내부 충돌 검사(`static.py`)가 IPV4_SRC/IPV4_DST를 딕셔너리
+       완전 일치로만 비교하던 것을 외부 탐지와 같은 `conflict.ip_overlaps`로
+       통일 — `10.0.0.0/24`와 `10.0.0.5/32`처럼 문자열은 다르지만 실제로
+       겹치는 CIDR 쌍을 이제 잡는다.
+    2. `enforcement.device` 미지정 시 컴파일러가 조용히 기본 스위치로
+       폴백하던 것(Stage 5)을 정적 검증에서는 `missing_device`로 명시
+       거부하도록 통일 — `grounding._check_references`에 추가.
+    3. `schema_validator`/`conflict_detector`/`static_validator`/
+       `validator.py` 넷 다 원본에 테스트가 0개였다 —
+       `tests/test_verify_gold350.py` 신규로 전부 커버.
+  - 이식 중 발견해 함께 고친 버그: `static._check_intra_conflicts`가
+    `f.get("treatment", {}).get(...)`로 action을 읽었는데, block 규칙은
+    `treatment` 키는 있지만 값이 `None`이라 `AttributeError`로 죽었다 —
+    정확히 forward-vs-block 상반 액션을 잡으려는 검사가 block 규칙 자체에서
+    크래시하는 셈이었다. `(f.get("treatment") or {})`로 수정.
+  - 그라운딩 병합 후 발견해 별도 커밋으로 고친 버그: `grounding._check_conflicts`가
+    `shadowed_rule` 판정에서 규칙 인덱스를 곧 priority로 가정했다 — 명시적
+    `rule.priority`가 인덱스 순서를 뒤집으면(더 나중 규칙이 더 높은 priority)
+    거꾸로 된 오탐(`shadowed_rule`)을 냈다. 컴파일러(`compile/compiler.py`의
+    `compile_prediction`)와 동일한 유효 priority 계산(`rule.priority` 우선,
+    없으면 `priority_start - index * priority_step`)으로 우열을 가리도록
+    수정 — `tests/test_verify_gold350.py`에 회귀 테스트 추가.
+  - `tests/test_verify_gold350.py` 신규 — 미지 host/ip/device 거부,
+    device 미지정 명시 거부(GOLD-350 accepted의 실제 enforcement-누락 규칙
+    포함), egress_port 범위 초과 거부, shadowed_rule 충돌(명시적 priority가
+    인덱스 순서를 뒤집는 경우 포함), FlowRule 스키마 검증, 5종 충돌 탐지
+    각각, compound CIDR 겹침 버그 재현 20개. `pytest` 43개 전부 초록(기존
+    24개 + 신규 19개).
+  - 완료 기준 충족: 그라운딩 검증(`verify_program`)이 미지 host/ip/device를
+    거부.
 - [x] **Stage 7.** Digital Twin (Stage 6을 건너뛰고 먼저 진행 — 정적 검증기가
   없어도 twin 자체는 컴파일된 flow를 그대로 소비하므로 순서 의존성이 없다.
   Stage 6은 별도로 완료한다.)
@@ -475,4 +560,6 @@ JSON Schema 자동생성, secret redaction, 동시성에서 연구 트랙이 우
   - 완료 기준 충족: `meets_target()`이 QoS 대역폭의 pass/fail 판정을 반환한다
     (`bandwidth.py`, `tests/test_twin.py`에서 검증).
 - [ ] **Stage 8.** Exp-2 (최종)
+- [ ] **Stage 9.** 웹 UI (신규)
 - [ ] **실행 로깅**
+- [ ] **전체 이식 완료 후 실험 재진행** (범위/일정 미정)
