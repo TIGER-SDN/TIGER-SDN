@@ -120,6 +120,11 @@ TIGER-SDN/
 │   ├── explain/, deploy/        장기 보류
 │   └── py.typed
 │
+├── scripts/                     Digital Twin 실검증 운영 스크립트 (Stage 7)
+│   ├── installation/{setup,doctor}.sh
+│   └── onos.sh, smoke_test.sh, twin_smoke_test.sh, twin_smoke.py,
+│       start_mn_single3.sh
+│
 ├── (웹 UI 디렉토리, 위치 미정 — Stage 9 착수 시 결정)
 │
 └── tests/
@@ -523,9 +528,9 @@ JSON Schema 자동생성, secret redaction, 동시성에서 연구 트랙이 우
     24개 + 신규 19개).
   - 완료 기준 충족: 그라운딩 검증(`verify_program`)이 미지 host/ip/device를
     거부.
-- [x] **Stage 7.** Digital Twin (Stage 6을 건너뛰고 먼저 진행 — 정적 검증기가
-  없어도 twin 자체는 컴파일된 flow를 그대로 소비하므로 순서 의존성이 없다.
-  Stage 6은 별도로 완료한다.)
+- [x] **Stage 7.** Digital Twin (Stage 6과 별도 브랜치에서 병행 진행 — 정적
+  검증기 유무와 무관하게 twin 자체는 컴파일된 flow를 그대로 소비하므로 순서
+  의존성이 없었다.)
   - 베이스: `sdn-intent-framework`의 `research/safe_intent_sdn/twin/`
     (`twin_verifier.py` 1100 LOC, `topology.py`, `traffic_generator.py`,
     `bandwidth.py`) + `onos_client.py`. 흡수: `bandwidth.py`의 `meets_target()`
@@ -556,9 +561,36 @@ JSON Schema 자동생성, secret redaction, 동시성에서 연구 트랙이 우
     본 경로)는 이 개발 환경에도 CI(ubuntu-latest, non-root, mn 미설치)에도
     없어 실행할 수 없으므로 테스트 대상에서 제외 — 플랫폼 요구사항은
     `_check_platform()`을 통해 항상 검증 가능한 형태로 게이팅되어 있다.
-    `pytest` 40개 전부 초록(기존 24개 + 신규 16개).
+    Stage 6과 합류(main) 후 `pytest` 59개 전부 초록(합류 시점 main 43개 +
+    신규 16개).
   - 완료 기준 충족: `meets_target()`이 QoS 대역폭의 pass/fail 판정을 반환한다
     (`bandwidth.py`, `tests/test_twin.py`에서 검증).
+  - **실검증 도구 이식 (2026-08-10, 병합 이후 추가).** `tests/test_twin.py`는
+    순수 로직만 검증하고 `verify()`의 본 경로(Mininet 기동, ONOS 배포,
+    reachability 프로브, rollback)는 이 개발 환경에도 CI에도 실행 조건이
+    없어 한 번도 exercise된 적이 없었다 — `docker compose`가 아니라
+    `sdn-intent-framework`의 `research/scripts/`가 쓰던 방식(ONOS만
+    `docker run --network host` 컨테이너 1개, Mininet/OVS는 호스트에 네이티브
+    설치)을 그대로 `scripts/{installation/{setup,doctor}.sh,onos.sh,
+    smoke_test.sh,start_mn_single3.sh}`로 포팅했다(Ubuntu 22.04도 지원하도록
+    확장, 컨테이너 이름을 `tiger-sdn-onos`로 변경). `scripts/twin_smoke.py`
+    + `twin_smoke_test.sh`는 신규 — `research/scripts/e3_twin_smoke.sh`와
+    같은 역할(twin_verifier를 실 컨트롤러에 대고 exercise)이지만, 그 스크립트가
+    의존하는 E3 하네스(`experiments/e3/`, 미이식)가 없어도 되도록 Stage 5
+    컴파일러로 그 자리에서 만든 작은 FlowRule(forward/block) 2개를 Stage 7
+    `TwinVerifier`에 직접 넘기는 방식으로 새로 작성했다.
+  - **실제 라이브 실행은 아직 안 함.** WSL2(Ubuntu 22.04)에서 `doctor.sh
+    --no-write`를 시험 실행해 스크립트 경로/명령 자체는 정상 동작함을
+    확인했지만, 두 가지가 막고 있어 이번 세션에서는 더 진행하지 않았다:
+    (1) 해당 WSL 배포판에 `sdn-xai-pipeline`/`sdn_intent-framework` 작업 때
+    띄워둔 ONOS 컨테이너(`xai-sdn-onos`)가 이미 6653/8101/8181 포트를 점유하고
+    있어 `tiger-sdn-onos`가 그대로 못 뜬다 — 그 컨테이너를 내릴지 재사용할지
+    사용자 결정이 필요하다. (2) 레포가 Windows 파일시스템(`/mnt/c/...`)에
+    있어 `.venv`를 WSL에서 `uv sync`하면 Windows 쪽 `.venv`(다른 OS 바이너리)를
+    덮어써 망가뜨릴 위험이 있다 — WSL 전용 venv 위치(예: `UV_PROJECT_ENVIRONMENT`
+    로 `$HOME/.venvs/tiger-sdn` 지정)를 정하고 나서 `setup.sh`를 실행해야
+    한다. 다음 세션에서 두 가지를 결정한 뒤 `sudo ./scripts/twin_smoke_test.sh`
+    까지 실제로 돌려 Stage 7 완료 기준을 라이브로도 재확인한다.
 - [ ] **Stage 8.** Exp-2 (최종)
 - [ ] **Stage 9.** 웹 UI (신규)
 - [ ] **실행 로깅**

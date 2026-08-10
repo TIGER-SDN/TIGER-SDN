@@ -1,0 +1,5 @@
+# scripts/ is executed inside WSL2/Linux (Stage 7 Digital Twin verification).
+# core.autocrlf=true on a Windows checkout would otherwise rewrite these to
+# CRLF, breaking the shebang line when run from /mnt/c under WSL.
+scripts/**/*.sh text eol=lf
+scripts/**/*.py text eol=lf
