@@ -51,6 +51,27 @@ Exp-1은 LLM 호출 없이 재현된다. 인용된 런의 원시 응답 로그�
 
 ---
 
+## Docker
+
+로컬에 Python 3.11/의존성이 없어도 Docker Compose로 테스트와 Exp-1 재현을 그대로
+돌릴 수 있다.
+
+```bash
+# pytest 전체
+docker compose run --rm test
+
+# Exp-1(T-D) 재현 — LLM 호출 없음, 커밋된 로그 기준
+docker compose run --rm exp1-score
+
+# 대화형 셸 (레포가 /app에 마운트됨)
+docker compose run --rm app
+```
+
+Digital Twin(Mininet/ONOS)은 아직 컨테이너화되어 있지 않다 — 진행 상황은
+[`docs/plan.md`](docs/plan.md)를 참고한다.
+
+---
+
 ## 문서
 
 - [`docs/plan.md`](docs/plan.md) - 개발 로드맵, 설계 배경, 진행 현황. 이 저장소의 유일한 계획 문서
