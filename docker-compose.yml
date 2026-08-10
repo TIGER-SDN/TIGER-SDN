@@ -1,0 +1,33 @@
+services:
+  app:
+    build: .
+    volumes:
+      - .:/app
+    env_file:
+      - path: .env
+        required: false
+    command: bash
+
+  test:
+    build: .
+    volumes:
+      - .:/app
+    command: pytest
+
+  exp1-score:
+    build: .
+    volumes:
+      - .:/app
+    command:
+      - python
+      - experiments/exp1/score.py
+      - --dataset
+      - data/gold/gold350_eval.jsonl
+      - --topology
+      - data/gold/topology_eval.json
+      - --logs
+      - experiments/exp1/logs/
+      - --output
+      - experiments/exp1/reports/summary.json
+      - --treatment
+      - T-D
