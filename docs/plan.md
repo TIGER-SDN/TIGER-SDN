@@ -374,6 +374,23 @@ traffic_generator.py, bandwidth.py) + `onos_client.py`가 더 완성도 높은
 JSON Schema 자동생성, secret redaction, 동시성에서 연구 트랙이 우월하다. 제품 구현의
 로그 필드를 흡수한다.
 
+### 인프라: Docker/Docker Compose (Stage 순서와 무관, 이슈 #28)
+
+로컬 Python 환경 없이 실험/실행을 재현할 수 있게 하는 병행 트랙. Stage 번호에
+묶이지 않고 아무 때나 진행 가능.
+
+**1차 스코프(완료):** 저장소 루트 `Dockerfile` + `docker-compose.yml` — `app`(대화형
+셸), `test`(`pytest` 전체), `exp1-score`(Exp-1 T-D 재현, LLM 호출 없음) 세 서비스.
+`docker compose run --rm test`/`exp1-score` 둘 다 컨테이너 안에서 로컬과 동일한
+결과(59 테스트 전부 통과, `T-D_openrouter_r1_summary.json`과 `metadata` 제외 완전
+일치)를 냄을 확인.
+
+**미해결(스트레치, 후속 이슈로 분리 권장):** Digital Twin(`src/tiger_sdn/twin/`)이
+요구하는 Mininet/ONOS는 아직 컨테이너화하지 않았다 — privileged 컨테이너, OVS 커널
+모듈, 호스트 네트워킹 등 고려 사항이 많아 별도 스코프로 다룬다. `verify()`의 본
+경로(Mininet+ONOS 실배포)는 여전히 이 저장소 어디에서도 실행 검증된 적이 없다
+(Stage 7 진행 현황 참고).
+
 ---
 
 ## 이식하지 않는 것
@@ -562,4 +579,10 @@ JSON Schema 자동생성, secret redaction, 동시성에서 연구 트랙이 우
 - [ ] **Stage 8.** Exp-2 (최종)
 - [ ] **Stage 9.** 웹 UI (신규)
 - [ ] **실행 로깅**
+- [x] **인프라: Docker/Docker Compose 1차 스코프** (이슈 #28)
+  - `Dockerfile`, `docker-compose.yml`, `.dockerignore` 신규. `app`/`test`/
+    `exp1-score` 세 서비스.
+  - 컨테이너 안에서 `pytest` 59개 전부 통과, Exp-1 T-D 재현이 커밋된 골든
+    리포트와 `metadata` 제외 완전 일치 확인.
+  - 미해결(스트레치): Digital Twin의 Mininet/ONOS 컨테이너화는 후속 이슈로 분리.
 - [ ] **전체 이식 완료 후 실험 재진행** (범위/일정 미정)
