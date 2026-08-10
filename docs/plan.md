@@ -579,18 +579,33 @@ JSON Schema 자동생성, secret redaction, 동시성에서 연구 트랙이 우
     의존하는 E3 하네스(`experiments/e3/`, 미이식)가 없어도 되도록 Stage 5
     컴파일러로 그 자리에서 만든 작은 FlowRule(forward/block) 2개를 Stage 7
     `TwinVerifier`에 직접 넘기는 방식으로 새로 작성했다.
-  - **실제 라이브 실행은 아직 안 함.** WSL2(Ubuntu 22.04)에서 `doctor.sh
-    --no-write`를 시험 실행해 스크립트 경로/명령 자체는 정상 동작함을
-    확인했지만, 두 가지가 막고 있어 이번 세션에서는 더 진행하지 않았다:
-    (1) 해당 WSL 배포판에 `sdn-xai-pipeline`/`sdn_intent-framework` 작업 때
-    띄워둔 ONOS 컨테이너(`xai-sdn-onos`)가 이미 6653/8101/8181 포트를 점유하고
-    있어 `tiger-sdn-onos`가 그대로 못 뜬다 — 그 컨테이너를 내릴지 재사용할지
-    사용자 결정이 필요하다. (2) 레포가 Windows 파일시스템(`/mnt/c/...`)에
-    있어 `.venv`를 WSL에서 `uv sync`하면 Windows 쪽 `.venv`(다른 OS 바이너리)를
-    덮어써 망가뜨릴 위험이 있다 — WSL 전용 venv 위치(예: `UV_PROJECT_ENVIRONMENT`
-    로 `$HOME/.venvs/tiger-sdn` 지정)를 정하고 나서 `setup.sh`를 실행해야
-    한다. 다음 세션에서 두 가지를 결정한 뒤 `sudo ./scripts/twin_smoke_test.sh`
-    까지 실제로 돌려 Stage 7 완료 기준을 라이브로도 재확인한다.
+  - **라이브 검증 완료 (같은 세션, WSL2 Ubuntu 22.04).** 기존 `xai-sdn-onos`
+    컨테이너(포트 6653/8101/8181 점유)를 내리고 `tiger-sdn-onos:2.7.0`을 새로
+    띄웠다. `.venv` 충돌은 `UV_PROJECT_ENVIRONMENT=$HOME/.venvs/tiger-sdn`로
+    레포 밖에 WSL 전용 venv를 둬서 피했다. `sudo ./scripts/twin_smoke_test.sh`
+    까지 실제로 실행해 forward/block 두 케이스 모두
+    `baseline_connectivity`/`intent_check`/`regression` 전부 PASS — Stage 7
+    코드가 처음으로 실 ONOS+Mininet에 FlowRule을 배포하고 도달성을 확인하고
+    롤백까지 정상 완료함을 확인했다.
+  - **과정에서 찾아 고친 문제 3건** (전부 `scripts/`, twin_verifier 자체는
+    무결):
+    1. `doctor.sh`가 `UV_PROJECT_ENVIRONMENT`를 몰라서 실제로는 정상인
+       환경도 FAIL로 오탐 — `<repo>/.venv` 대신 그 변수를 우선 확인하도록 수정.
+    2. **실제 사고.** `sudo` 없이 `-E`를 안 붙이고 `twin_smoke_test.sh`를
+       실행하면 `UV_PROJECT_ENVIRONMENT`가 사라져 `uv run`이
+       `<repo>/.venv`(Windows에서 빌드된 그 venv, `/mnt/c/...` 위에 있으므로
+       WSL에서도 같은 경로)로 폴백한다 — 실제로 이 경로로 Windows `.venv`가
+       삭제되고 Linux/Python 3.14로 재생성되어 Windows 쪽 개발 환경이 한 번
+       깨졌다(`uv sync`로 복구). `require_project_environment()`를 추가해
+       `PROJECT_ROOT`가 `/mnt/*` 위인데 그 변수가 없으면 추측하지 않고
+       명시적으로 거부하도록 고쳤다 — 이런 문서화만으로는 막지 못한 사고였다.
+    3. `scripts/twin_smoke.py`의 두 번째 케이스가 `block h2->h3`였는데,
+       `twin.topology.get_test_host_pairs()`가 다이아몬드 토폴로지 기본값에서
+       `h2<->h3`를 "테스트 중인 인텐트와 무관하게 항상 뚫려 있어야 할 쌍"으로
+       하드코딩해 둔 것과 충돌 — 라이브로 돌려보니 `intent_check=True`(차단
+       자체는 정확)인데 `regression=False`(무관한 쌍이 막혔다고 오판)로
+       FAIL이 났다. TwinVerifier의 버그가 아니라 스모크 테스트가 예약된 쌍을
+       건드린 설계 실수였다 — 두 케이스 모두 `h1<->h4`로 바꿔 해결.
 - [ ] **Stage 8.** Exp-2 (최종)
 - [ ] **Stage 9.** 웹 UI (신규)
 - [ ] **실행 로깅**
