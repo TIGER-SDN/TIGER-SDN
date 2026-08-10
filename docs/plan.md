@@ -332,12 +332,17 @@ N홉 체인을 컴파일러가 아니라 **annotator가 이미 N개의 개별 �
 
 **완료 기준:** 그라운딩 검증이 미지 엔티티를 거부.
 
-### Stage 7. Digital Twin
+### Stage 7. Digital Twin (완료)
 
-베이스: `stage4_twin/twin_verifier.py`(1100 LOC) 외 토폴로지/ONOS클라이언트/트래픽
-생성기. 흡수: `research/safe_intent_sdn/twin/bandwidth.py`의 `meets_target()` 판정
-(iperf가 측정만 하고 판정을 안 하던 것 보완). `ovs-ofctl` 명령을 f-string 조립에서
-인자 리스트로 변경.
+계획 당시엔 "베이스: `stage4_twin/twin_verifier.py`(1100 LOC, `xai_pipeline`
+쪽)"로 적었지만, 실제로는 이미 `meets_target()` 판정을 갖추고 있던
+`research/safe_intent_sdn/twin/`(twin_verifier.py 1100 LOC, topology.py,
+traffic_generator.py, bandwidth.py) + `onos_client.py`가 더 완성도 높은
+베이스였다 — 계획의 "흡수" 대상이던 `meets_target()`이 애초에 이 원본에
+있었으므로 별도 이식이 아니라 베이스 선택 자체를 research 쪽으로 옮겼다.
+`ovs-ofctl` 명령은 계획대로 f-string 조립에서 인자 리스트로 변경했다.
+`_extract_intent_specs`는 통합 컴파일러(Stage 5)의 평평한 `{"flows": [...]}`
+출력에 맞게 재작성 — 자세한 내용은 "진행 현황" 참고.
 
 **완료 기준:** QoS 대역폭이 pass/fail 판정을 반환.
 
@@ -503,14 +508,57 @@ JSON Schema 자동생성, secret redaction, 동시성에서 연구 트랙이 우
     `treatment` 키는 있지만 값이 `None`이라 `AttributeError`로 죽었다 —
     정확히 forward-vs-block 상반 액션을 잡으려는 검사가 block 규칙 자체에서
     크래시하는 셈이었다. `(f.get("treatment") or {})`로 수정.
+  - 그라운딩 병합 후 발견해 별도 커밋으로 고친 버그: `grounding._check_conflicts`가
+    `shadowed_rule` 판정에서 규칙 인덱스를 곧 priority로 가정했다 — 명시적
+    `rule.priority`가 인덱스 순서를 뒤집으면(더 나중 규칙이 더 높은 priority)
+    거꾸로 된 오탐(`shadowed_rule`)을 냈다. 컴파일러(`compile/compiler.py`의
+    `compile_prediction`)와 동일한 유효 priority 계산(`rule.priority` 우선,
+    없으면 `priority_start - index * priority_step`)으로 우열을 가리도록
+    수정 — `tests/test_verify_gold350.py`에 회귀 테스트 추가.
   - `tests/test_verify_gold350.py` 신규 — 미지 host/ip/device 거부,
     device 미지정 명시 거부(GOLD-350 accepted의 실제 enforcement-누락 규칙
-    포함), egress_port 범위 초과 거부, shadowed_rule 충돌, FlowRule 스키마
-    검증, 5종 충돌 탐지 각각, compound CIDR 겹침 버그 재현 20개.
-    `pytest` 42개 전부 초록(기존 24개 + 신규 18개).
+    포함), egress_port 범위 초과 거부, shadowed_rule 충돌(명시적 priority가
+    인덱스 순서를 뒤집는 경우 포함), FlowRule 스키마 검증, 5종 충돌 탐지
+    각각, compound CIDR 겹침 버그 재현 20개. `pytest` 43개 전부 초록(기존
+    24개 + 신규 19개).
   - 완료 기준 충족: 그라운딩 검증(`verify_program`)이 미지 host/ip/device를
     거부.
-- [ ] **Stage 7.** Digital Twin
+- [x] **Stage 7.** Digital Twin (Stage 6을 건너뛰고 먼저 진행 — 정적 검증기가
+  없어도 twin 자체는 컴파일된 flow를 그대로 소비하므로 순서 의존성이 없다.
+  Stage 6은 별도로 완료한다.)
+  - 베이스: `sdn-intent-framework`의 `research/safe_intent_sdn/twin/`
+    (`twin_verifier.py` 1100 LOC, `topology.py`, `traffic_generator.py`,
+    `bandwidth.py`) + `onos_client.py`. 흡수: `bandwidth.py`의 `meets_target()`
+    판정(계획대로 원본에 이미 있었음 — iperf3가 측정만 하고 판정을 안 하던
+    문제는 이 함수가 이미 해결한 상태였다).
+  - `src/tiger_sdn/twin/{twin_verifier,topology,traffic_generator,bandwidth}.py`,
+    `src/tiger_sdn/backends/onos.py` 신규. `OnosClient`/`OnosError`는 계획된
+    목표 구조대로 `twin/`이 아니라 `backends/onos.py`로 분리했다 — Stage 5의
+    `compile/onos.py`(FlowRule 스키마)와 이름은 겹치지만 역할이 다르다(배포
+    "클라이언트" vs 스키마 "정의").
+  - `_extract_intent_specs`를 통합 컴파일러 출력 형태에 맞게 재작성했다 —
+    원본은 `xai_pipeline` 컴파일러의 `sub_rules` 중첩 구조를 가정했지만
+    `tiger_sdn.compile.compile_prediction()`은 `{"flows": [f1, ..., fN]}`로
+    항상 평평하게 내므로, 원본 그대로 쓰면 컴파운드 예측(규칙 2개 이상)에서
+    첫 flow 이후를 전부 놓쳤을 것이다. flow 하나당 intent_spec 하나로 재작성.
+  - `verify()`가 dict뿐 아니라 `OnosFlowSet`(pydantic)도 받도록 확장 —
+    `compile_prediction()`의 반환값을 바로 넘길 수 있다.
+  - `docs/plan.md` Stage 7에 명시된 pitfall(`ovs-ofctl` 명령을 f-string
+    조립에서 인자 리스트로) 반영 — `_install_steering`/`_remove_steering`이
+    이제 `net.get(hop).cmd("ovs-ofctl", "add-flow", hop, shlex.quote(match), ...)`
+    형태로 각 필드를 별도 인자로 넘기고 `match`는 `shlex.quote()`로 방어한다.
+  - `tests/test_twin.py` 신규 — 대역폭 판정(`meets_target`/`_parse_mbps`),
+    토폴로지 헬퍼(`get_expected_device_ids`/`get_test_host_pairs`), 실제
+    GOLD-350 규칙을 컴파일한 flow에서 `_extract_intent_specs`/`_egress_port`가
+    forward/block/compound 각각 올바른 intent_spec을 뽑는지, 플랫폼 게이팅
+    (`_check_platform`/`verify()`가 Mininet/ONOS 없이도 `status="skipped"`로
+    안전하게 반환하는지)을 검증한다. Mininet+ONOS 실배포 자체(`verify()`의
+    본 경로)는 이 개발 환경에도 CI(ubuntu-latest, non-root, mn 미설치)에도
+    없어 실행할 수 없으므로 테스트 대상에서 제외 — 플랫폼 요구사항은
+    `_check_platform()`을 통해 항상 검증 가능한 형태로 게이팅되어 있다.
+    `pytest` 40개 전부 초록(기존 24개 + 신규 16개).
+  - 완료 기준 충족: `meets_target()`이 QoS 대역폭의 pass/fail 판정을 반환한다
+    (`bandwidth.py`, `tests/test_twin.py`에서 검증).
 - [ ] **Stage 8.** Exp-2 (최종)
 - [ ] **Stage 9.** 웹 UI (신규)
 - [ ] **실행 로깅**
