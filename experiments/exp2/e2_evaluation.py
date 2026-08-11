@@ -14,17 +14,20 @@ Stage 6이 한동안 3종으로 줄여뒀던 것을 Stage 8에서 다시 채웠�
 """
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from statistics import mean, median
 from typing import Any, Callable, Iterable, Literal, get_args
 
 from pydantic import Field
 
-from tiger_sdn.ir import IntentProgram, StrictModel
+from tiger_sdn.ir import IntentProgram, StrictModel, from_research
 from tiger_sdn.verify import FindingCategory, ValidationFinding
 
 __all__ = [
     "E2Case",
     "E2Result",
+    "load_cases",
     "validate_results",
     "score_treatment",
     "compute_validator_overhead",
@@ -53,6 +56,32 @@ class E2Result(StrictModel):
     validator_duration_ms: float | None = Field(default=None, ge=0)
     compiler_duration_ms: float | None = Field(default=None, ge=0)
     duration_ms: float = Field(ge=0)
+
+
+def load_cases(path: Path) -> list[E2Case]:
+    """cases*.jsonl(연구 스키마 그대로 커밋됨)을 읽어 통합 IR로 변환한다.
+
+    원본 run_validation.py/score.py는 데이터 파일이 이미 자기 스키마와
+    같았으므로 `E2Case.model_validate_json()`을 바로 썼다. 여기서는 파일이
+    여전히 연구 스키마(`source_port`, `program.sfc_chain` 등)라서
+    `from_research()`로 변환하는 단계가 하나 더 필요하다.
+    """
+    cases = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        raw = json.loads(line)
+        prediction = from_research({"status": "accepted", "program": raw["program"]})
+        cases.append(
+            E2Case(
+                id=raw["id"],
+                category=raw["category"],
+                expected_findings=raw.get("expected_findings", []),
+                expected_codes=raw.get("expected_codes", []),
+                program=prediction.program,
+            )
+        )
+    return cases
 
 
 def validate_results(cases: Iterable[E2Case], results: Iterable[E2Result]) -> list[E2Result]:
