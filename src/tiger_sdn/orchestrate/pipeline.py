@@ -20,12 +20,19 @@ main.py와 다른 점 셋:
 3. **ONOS 기존 flow 조회가 베스트에포트.** 원본처럼 조회 실패해도 파이프라인은
    계속 진행하고(그저 정적 검증의 외부 충돌 탐지를 스킵), 루프 최초 1회에만
    조회한다.
+
+Stage 9 API 레이어(웹 UI, 이 PR 범위 밖)를 얹으면서 `on_event` 콜백 하나를
+추가했다 — `run_context`(파일 기반 `events.jsonl`)와 달리, 프로세스 안에서
+SSE 스트림에 바로 연결할 수 있는 동기 콜백이 필요해서다. `on_event=None`이면
+동작이 완전히 그대로다(기존 호출부/테스트 영향 없음). twin 단계에서는
+`TwinVerifier.verify()`의 `progress_cb`에도 그대로 연결해, twin 내부
+세부 진행 메시지("(1) waiting for ONOS controller..." 등)까지 SSE로 나간다.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Literal, Optional
+from typing import Any, Callable, Literal, Optional
 
 from tiger_sdn.backends import OnosClient
 from tiger_sdn.compile import CompilationError, OnosFlowSet, compile_prediction
@@ -104,6 +111,7 @@ def run_pipeline(
     twin_checks: frozenset[str] = REACH_ONLY,
     onos_client: Optional[OnosClient] = None,
     run_context: Optional[RunContext] = None,
+    on_event: Optional[Callable[[dict[str, Any]], None]] = None,
 ) -> PipelineResult:
     """자연어 인텐트 하나를 파싱부터 twin 검증까지 끝까지 돌린다.
 
@@ -119,7 +127,14 @@ def run_pipeline(
             탐지만 스킵됨).
         run_context: 있으면 각 게이트를 runctx.RunContext.stage()로 감싸고
             아티팩트를 저장한다. None이면 로깅 없이 순수 함수로 동작한다.
+        on_event: 있으면 각 게이트 전이마다 ``{"type": ..., ...}`` dict로 호출된다
+            (Stage 9 API 레이어의 SSE 스트림용). None이면 아무 것도 안 한다.
     """
+
+    def emit(event_type: str, **fields: Any) -> None:
+        if on_event is not None:
+            on_event({"type": event_type, **fields})
+
     intent = intent.strip()
     if not intent:
         return PipelineResult(decision="ERROR", intent=intent, reason="intent is empty")
@@ -146,12 +161,14 @@ def run_pipeline(
     attempt = 0
 
     for attempt in range(MAX_REPAIR_ATTEMPTS + 1):
+        emit("stage", stage="parse", status="running", attempt=attempt)
         with _stage(run_context, "parse"):
             try:
                 parse_result = parse_intent(
                     intent, model=model, topology_prompt=topology_prompt, repair_feedback=repair_feedback,
                 )
             except ValueError as exc:
+                emit("stage", stage="parse", status="error", error=str(exc))
                 return PipelineResult(decision="ERROR", intent=intent, reason=f"parse failed: {exc}", repair_attempts=attempt)
             prediction = parse_result.prediction
 
@@ -160,66 +177,97 @@ def run_pipeline(
             reason = f"parser rejected: [{prediction.rejection.reason}] {prediction.rejection.detail or ''}"
             if run_context is not None:
                 run_context.log_event("intent_rejected", stage="parse", reason=prediction.rejection.reason)
+            emit("stage", stage="parse", status="rejected", reason=reason)
+            emit("done", decision="REJECT", reason=reason)
             return PipelineResult(decision="REJECT", intent=intent, reason=reason, repair_attempts=attempt, prediction=prediction)
+        emit("stage", stage="parse", status="done", program=prediction.model_dump(mode="json"))
 
         if run_context is not None:
             run_context.save_artifact("generated_ir", prediction.model_dump(mode="json"))
 
+        emit("stage", stage="grounding", status="running", attempt=attempt)
         with _stage(run_context, "grounding"):
             grounding_report = verify_program(prediction.program, inventory)
         if not grounding_report.is_valid:
+            findings = [f.model_dump(mode="json") for f in grounding_report.findings]
+            emit("stage", stage="grounding", status="rejected", findings=findings)
             if attempt >= MAX_REPAIR_ATTEMPTS:
+                reason = f"grounding failed after {MAX_REPAIR_ATTEMPTS} repair attempts"
+                emit("done", decision="REJECT", reason=reason)
                 return PipelineResult(
-                    decision="REJECT", intent=intent,
-                    reason=f"grounding failed after {MAX_REPAIR_ATTEMPTS} repair attempts",
+                    decision="REJECT", intent=intent, reason=reason,
                     repair_attempts=attempt, prediction=prediction, grounding_report=grounding_report,
                 )
             repair_feedback = build_repair_feedback_from_grounding(grounding_report, attempt + 1, MAX_REPAIR_ATTEMPTS)
+            emit("repair", attempt=attempt + 1, reason="grounding_failed")
             continue
+        emit("stage", stage="grounding", status="done")
 
+        emit("stage", stage="compile", status="running", attempt=attempt)
         with _stage(run_context, "compile"):
             try:
                 flow_set = compile_prediction(prediction, endpoint_ips=endpoint_ips)
             except CompilationError as exc:
+                emit("stage", stage="compile", status="error", error=str(exc))
+                reason = f"compile failed: {exc}"
+                emit("done", decision="ERROR", reason=reason)
                 return PipelineResult(
-                    decision="ERROR", intent=intent, reason=f"compile failed: {exc}",
+                    decision="ERROR", intent=intent, reason=reason,
                     repair_attempts=attempt, prediction=prediction, grounding_report=grounding_report,
                 )
+        flowrule = flow_set.model_dump(mode="json")
+        emit("stage", stage="compile", status="done", flowrule=flowrule)
         if run_context is not None:
-            run_context.save_artifact("compiled_policy", flow_set.model_dump(mode="json"))
+            run_context.save_artifact("compiled_policy", flowrule)
 
+        emit("stage", stage="static_validation", status="running", attempt=attempt)
         with _stage(run_context, "static_validation"):
             static_result = static_validate(flow_set.model_dump(), existing_flows=existing_flows)
+        static_result_dict = {
+            "passed": static_result.passed, "schema_errors": static_result.schema_errors,
+            "conflicts": static_result.conflicts, "warnings": static_result.warnings,
+        }
         if run_context is not None:
-            run_context.save_artifact("static_validation", {
-                "passed": static_result.passed, "schema_errors": static_result.schema_errors,
-                "conflicts": static_result.conflicts, "warnings": static_result.warnings,
-            })
+            run_context.save_artifact("static_validation", static_result_dict)
         if not static_result.passed:
+            emit("stage", stage="static_validation", status="rejected", result=static_result_dict)
             if attempt >= MAX_REPAIR_ATTEMPTS:
+                reason = f"static validation failed after {MAX_REPAIR_ATTEMPTS} repair attempts"
+                emit("done", decision="REJECT", reason=reason)
                 return PipelineResult(
-                    decision="REJECT", intent=intent,
-                    reason=f"static validation failed after {MAX_REPAIR_ATTEMPTS} repair attempts",
+                    decision="REJECT", intent=intent, reason=reason,
                     repair_attempts=attempt, prediction=prediction,
                     grounding_report=grounding_report, flow_set=flow_set, static_result=static_result,
                 )
             repair_feedback = build_repair_feedback_from_static(static_result, attempt + 1, MAX_REPAIR_ATTEMPTS)
+            emit("repair", attempt=attempt + 1, reason="static_validation_failed")
             continue
+        emit("stage", stage="static_validation", status="done", result=static_result_dict)
 
         break
 
     assert flow_set is not None and static_result is not None  # 위 for 루프가 break로만 여기 도달
 
+    emit("stage", stage="twin", status="running")
     with _stage(run_context, "twin"):
         if skip_twin:
             twin_result = TwinResult(status="skipped", reason="skip_twin=True")
         else:
-            twin_result = TwinVerifier().verify(flow_set, checks=twin_checks)
+            twin_result = TwinVerifier().verify(
+                flow_set, checks=twin_checks,
+                progress_cb=lambda msg: emit("progress", stage="twin", msg=msg),
+            )
+    twin_result_dict = {
+        "status": twin_result.status, "reason": twin_result.reason,
+        "checks": twin_result.checks, "evidence": twin_result.evidence,
+    }
+    emit(
+        "stage", stage="twin",
+        status="skipped" if twin_result.status == "skipped" else "done",
+        result=twin_result_dict,
+    )
     if run_context is not None:
-        run_context.save_artifact("twin_test_results", {
-            "status": twin_result.status, "reason": twin_result.reason,
-            "checks": twin_result.checks, "evidence": twin_result.evidence,
-        })
+        run_context.save_artifact("twin_test_results", twin_result_dict)
 
     if twin_result.status == "passed":
         decision: Decision = "APPROVE"
@@ -227,6 +275,8 @@ def run_pipeline(
         decision = "APPROVE_WITHOUT_TWIN"
     else:
         decision = "REJECT"
+
+    emit("done", decision=decision, reason=twin_result.summary())
 
     return PipelineResult(
         decision=decision, intent=intent, reason=twin_result.summary(), repair_attempts=attempt,
