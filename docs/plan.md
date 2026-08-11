@@ -688,5 +688,21 @@ JSON Schema 자동생성, secret redaction, 동시성에서 연구 트랙이 우
     잡는 실질적 안전망. Stage 8 합류 후 `pytest` 69개 전부 초록(합류 시점
     main 65개 + 신규 4개).
 - [ ] **Stage 9.** 웹 UI (신규)
-- [ ] **실행 로깅**
+- [x] **실행 로깅** (완료, 이슈 #16)
+  - `research/safe_intent_sdn/run_context.py` + `schema.py` -> `src/tiger_sdn/runctx/
+    {run_context,schema}.py`. 이벤트 스트림/매니페스트/아티팩트 버저닝/secret
+    redaction 로직은 변경 없이 그대로, `RunContext`가 받던 `AppSettings`(TOML +
+    pydantic-settings, 이 레포엔 없음)만 걷어내고 필요한 값(model_name,
+    prompt_version, log_dir, feature_flags, secret_values 등)을 생성자 키워드
+    인자로 직접 받게 바꿨다. `schema.py`의 import는 `tiger_sdn.ir.prediction`/
+    `tiger_sdn.compile.onos`로 교체.
+  - "제품 구현의 로그 필드 흡수"(이슈 원문) 확인 결과: `xai_pipeline`의
+    `main.py`/`api.py`가 손으로 채우던 `pipeline_result`/`result` dict(stage1~6 +
+    decision)는 `RunManifest`의 아티팩트 슬롯(`input_intent`/`generated_ir`/
+    `compiled_policy`/`static_validation`/`twin_test_results`/`repair_history`)이
+    이미 stage1~4 + repair loop를 커버한다 — 추가로 흡수할 필드 없음. `rag_k`(RAG)는
+    이식 대상에서 제외됐고, stage5/6(XAI 설명·실배포)는 장기 보류라 대응 슬롯이
+    없는 게 맞다.
+  - `tests/test_runctx.py` 신규(16개, 원본 `research/tests/test_config_and_logging.py`
+    포팅 — `AppSettings` 로딩 테스트만 제외). `pytest` 전부 초록(85개).
 - [ ] **전체 이식 완료 후 실험 재진행** (범위/일정 미정)
