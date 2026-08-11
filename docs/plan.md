@@ -115,8 +115,8 @@ TIGER-SDN/
 │   ├── verify/                  Stage 6
 │   ├── twin/                    Stage 7
 │   ├── backends/onos.py         Stage 5-7 (배포 백엔드로 격리)
-│   ├── runctx/                  실행 로깅 (연구 트랙이 정본)
-│   ├── parse/, orchestrate/pipeline.py  Stage 8
+│   ├── runctx/                  실행 로깅 (완료, 이슈 #16)
+│   ├── parse/, orchestrate/pipeline.py  Stage 9 파서/파이프라인 부분 (완료)
 │   ├── explain/, deploy/        장기 보류
 │   └── py.typed
 │
@@ -414,6 +414,13 @@ vs B2(검증기+컴파일러)를 비교하는 RQ2 실험(컴파일러-검증기 
 **완료 기준:** 자연어 인텐트를 입력해 accepted/rejected 결과와 (accepted인 경우)
 컴파일된 FlowRule을 웹 UI에서 확인할 수 있다.
 
+**파서/파이프라인 부분 완료 (2026-08-11), 웹 UI 자체는 별도 진행.** Stage 9는
+두 조각이다 — (1) 자연어를 실제로 IR로 바꾸고 배선하는 코어 로직
+(`parse/`, `orchestrate/pipeline.py`), (2) 그걸 브라우저에서 조작하게 하는
+웹 UI(프레임워크 결정 포함). 이번엔 (1)만 다룬다. 아래 "진행 현황"의 Stage 9
+항목 참고 — 완료 기준(웹 UI에서 확인 가능)은 아직 미충족이라 체크박스는
+그대로 둔다.
+
 ### 실행 로깅 (Stage 2 직후 착수해도 무방)
 
 `research/safe_intent_sdn/run_context.py` + `schema.py`가 이 영역의 정본이다 -
@@ -688,6 +695,45 @@ JSON Schema 자동생성, secret redaction, 동시성에서 연구 트랙이 우
     잡는 실질적 안전망. Stage 8 합류 후 `pytest` 69개 전부 초록(합류 시점
     main 65개 + 신규 4개).
 - [ ] **Stage 9.** 웹 UI (신규)
+  - [x] 파서/파이프라인 부분 완료 (2026-08-11) — 웹 UI 자체(완료 기준)는 미착수.
+  - `src/tiger_sdn/parse/parser.py`: `sdn-intent-framework`의
+    `stage1_intent/intent_parser.py` 구조를 베이스로 이식하되 RAG는 빼고
+    (이미 "이식하지 않는 것" 결정 사항), 토폴로지 그라운딩도 파서 안에서
+    안 한다(Stage 6 `verify.grounding.verify_program()`이 대신함). LLM
+    출력은 `prompts/intent_ir.md` 스키마 그대로가 GOLD-350 제품 스키마와
+    일치해 `ir.adapter.from_gold350()`으로 바로 통합 IR에 태운다.
+  - `src/tiger_sdn/parse/llm_client.py`: `experiments/exp1/run.py`의
+    `call_llm`/`call_gemini`/`call_openai_compatible`을 베이스로 재이식
+    (non-streaming — 원본 `stage1_intent/llm_client.py`는 스트리밍이라
+    토큰 사용량을 못 얻어 runctx 로깅에 못 꽂는다). `experiments/exp1/run.py`
+    자체는 손대지 않았다(Exp-1은 코어와 분리 유지, CLAUDE.md 규율).
+  - `src/tiger_sdn/orchestrate/pipeline.py` + `repair.py`: 원본 `main.py`의
+    Repair Loop(파싱->컴파일->정적검증 최대 `MAX_REPAIR_ATTEMPTS`회 재시도,
+    twin은 루프 밖 1회)를 승격(Stage 8 "착수 시 결정 사항"에서 이연됐던
+    부분). XAI 설명/ONOS 실배포(원본 stage5/6)는 범위 밖 — 결정
+    (APPROVE/APPROVE_WITHOUT_TWIN/REJECT/ERROR)까지만 낸다. 그라운딩(IR
+    단계)과 정적 검증(FlowRule 단계)을 파이프라인이 명시적으로 두 게이트로
+    돌리고, 게이트별로 다른 repair feedback 생성기(`repair.py`)를 쓴다 —
+    원본의 단일 `build_repair_feedback`과 다른 점. `run_context`를 넘기면
+    각 게이트를 `runctx.RunContext.stage()`로 감싸고 아티팩트를 저장한다.
+  - 배선 중 `verify/schema.py`에서 실버그 발견: `isPermanent`를 `str`로만
+    받게 돼 있었는데 `compile/compiler.py`가 실제로 채우는 값은 파이썬
+    `bool`(`True`)이라 `compile_prediction()` 결과를 그대로 정적 검증에
+    태우면 항상 거부됐다(손으로 만든 dict 픽스처만 테스트해 와서 Stage 6
+    완료 이후로도 안 드러났음). Stage 7 라이브 twin 검증이 실 ONOS에
+    `isPermanent: true`(JSON boolean)를 성공 배포한 전례가 있어 `bool |
+    str`로 넓혀 고쳤다(문자열 표기도 계속 받음).
+  - `scripts/run_pipeline.py`: `run_pipeline()` 하나를 CLI로 돌려보는
+    스모크 스크립트(원본 `main.py`의 6단계/RAG/XAI/배포를 그대로 포팅한
+    게 아니라 이번 파이프라인 전용으로 새로 작성) — 웹 UI 없이도 눈으로
+    확인하는 용도. 실제로 LLM을 호출하는 첫 실사용 지점이라(지금까지는
+    커밋된 로그 재채점만 해 왔음) Gemini 기본 모델을 쓰려면
+    `google-genai`가 추가로 필요하다는 게 이번에 드러남(pyproject.toml
+    기본 의존성에는 없음).
+  - `tests/test_parse.py`(11개), `tests/test_orchestrate_pipeline.py`(9개)
+    신규 — LLM 호출은 목으로 대체. `pytest` 105개 중 104개 초록(main 85개 +
+    신규 20개; 나머지 1개는 `test_runctx.py`의 기존 Windows 경로 구분자
+    문제로 이번 변경과 무관하게 원래도 실패 — stash로 확인함).
 - [x] **실행 로깅** (완료, 이슈 #16)
   - `research/safe_intent_sdn/run_context.py` + `schema.py` -> `src/tiger_sdn/runctx/
     {run_context,schema}.py`. 이벤트 스트림/매니페스트/아티팩트 버저닝/secret
