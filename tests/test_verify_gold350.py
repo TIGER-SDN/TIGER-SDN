@@ -277,6 +277,76 @@ def test_detect_conflict_generalization_for_broader_match_same_action():
     assert conflict["conflict_type"] == "Generalization"
 
 
+# ── 그라운딩: path (SFC 체인 연속성/순서, reroute avoid_device) ─────────
+#
+# Stage 8(Exp-2 sfc/reroute 확장, docs/plan.md Stage 8 "착수 시 결정 사항")에서
+# 이식. data/gold/topology_eval.json의 s1 포트 9가 "firewall/IDS service
+# point (SFC waypoint)"로 이미 문서화되어 있어 그 배선을 그대로 쓴다.
+
+
+def _sfc_rule(*, role: str, device: str, egress_port: int, waypoints: list[str], in_port: int | None = None) -> IntentRule:
+    return IntentRule(
+        action="sfc",
+        sfc_role=role,
+        selector=IntentSelector(source={"host": "h1"}, destination={"host": "h2"}, in_port=in_port),
+        enforcement=IntentEnforcement(device=device, egress_port=egress_port),
+        routing={"waypoints": waypoints},
+    )
+
+
+def test_verify_program_accepts_continuous_sfc_chain(inventory: TopologyInventory):
+    chain = ["of:0000000000000001:9"]
+    ingress = _sfc_rule(role="ingress", device="s1", egress_port=9, waypoints=chain)
+    egress = _sfc_rule(role="egress", device="s1", egress_port=4, waypoints=chain, in_port=9)
+    report = verify_program(IntentProgram(rules=[ingress, egress]), inventory)
+    assert report.is_valid
+
+
+def test_verify_program_rejects_sfc_chain_length_mismatch(inventory: TopologyInventory):
+    chain = ["of:0000000000000001:9"]
+    ingress = _sfc_rule(role="ingress", device="s1", egress_port=9, waypoints=chain)
+    transit = _sfc_rule(role="transit", device="s1", egress_port=9, waypoints=chain, in_port=9)
+    egress = _sfc_rule(role="egress", device="s1", egress_port=4, waypoints=chain, in_port=9)
+    report = verify_program(IntentProgram(rules=[ingress, transit, egress]), inventory)
+    assert any(f.code == "path_chain_length_mismatch" for f in report.findings)
+
+
+def test_verify_program_rejects_sfc_waypoint_device_mismatch(inventory: TopologyInventory):
+    chain = ["of:0000000000000002:1"]  # 체인은 s2를 가리키지만 다음 규칙은 s1
+    ingress = _sfc_rule(role="ingress", device="s1", egress_port=9, waypoints=chain)
+    egress = _sfc_rule(role="egress", device="s1", egress_port=4, waypoints=chain, in_port=9)
+    report = verify_program(IntentProgram(rules=[ingress, egress]), inventory)
+    assert any(f.code == "path_waypoint_device_mismatch" for f in report.findings)
+
+
+def test_verify_program_rejects_sfc_port_discontinuity(inventory: TopologyInventory):
+    chain = ["of:0000000000000001:9"]
+    ingress = _sfc_rule(role="ingress", device="s1", egress_port=9, waypoints=chain)
+    # egress의 in_port(3)가 체인 토큰의 포트(9)와 불연속
+    egress = _sfc_rule(role="egress", device="s1", egress_port=4, waypoints=chain, in_port=3)
+    report = verify_program(IntentProgram(rules=[ingress, egress]), inventory)
+    assert any(f.code == "path_port_discontinuity" for f in report.findings)
+
+
+def test_verify_program_rejects_sfc_role_order_duplicate_ingress(inventory: TopologyInventory):
+    chain = ["of:0000000000000001:9"]
+    first = _sfc_rule(role="ingress", device="s1", egress_port=9, waypoints=chain)
+    second = _sfc_rule(role="ingress", device="s1", egress_port=4, waypoints=chain, in_port=9)
+    report = verify_program(IntentProgram(rules=[first, second]), inventory)
+    assert any(f.code == "path_role_order_invalid" for f in report.findings)
+
+
+def test_verify_program_rejects_reroute_avoid_device_conflict(inventory: TopologyInventory):
+    rule = IntentRule(
+        action="reroute",
+        selector=IntentSelector(source={"host": "h1"}, destination={"host": "h4"}),
+        enforcement=IntentEnforcement(device="s1", egress_port=1),
+        routing={"avoid_device": "s1"},
+    )
+    report = verify_program(_program(rule), inventory)
+    assert any(f.code == "path_avoid_device_conflict" for f in report.findings)
+
+
 # ── static.validate: compound 내부 충돌의 CIDR 겹침 버그 수정 ────────────
 
 

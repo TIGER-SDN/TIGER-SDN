@@ -1,0 +1,218 @@
+{
+  "topology_id": "netintent-onos-benchmark-inventory",
+  "note": "sdn-intent-framework의 research/experiments/e1/data/topology.json 포팅 (experiments/exp2/run.py의 기본 --topology, cases.jsonl/cases_sfc_reroute.jsonl이 참조하는 원본 인벤토리). 유일한 변경: 마스크 없는 IPv4 별칭마다 /32 형태를 추가했다 — tiger_sdn.ir.model.EndpointRef가 마스크 없는 IP를 항상 /32로 정규화하는데(from_research() 변환 후), 원본 파일은 bare IP만 별칭으로 갖고 있어 그대로 쓰면 정상 케이스도 unknown_ip로 오탐된다(data/gold/topology_eval.json이 이미 같은 방식으로 두 형태를 함께 싣고 있음).",
+  "source": {
+    "repository": "https://github.com/Muhammadkamrul/NetIntent",
+    "commit": "5d5a2377673893dc8a6585346e64272da43a54fc"
+  },
+  "entities": [
+    {
+      "id": "host:h1",
+      "aliases": [
+        "h1",
+        "10.0.0.1",
+        "10.0.0.1/32"
+      ]
+    },
+    {
+      "id": "host:h2",
+      "aliases": [
+        "h2",
+        "10.0.0.2",
+        "10.0.0.2/32"
+      ]
+    },
+    {
+      "id": "host:h3",
+      "aliases": [
+        "h3",
+        "10.0.0.3",
+        "10.0.0.3/32"
+      ]
+    },
+    {
+      "id": "host:h4",
+      "aliases": [
+        "h4",
+        "10.0.0.4",
+        "10.0.0.4/32"
+      ]
+    },
+    {
+      "id": "endpoint:10.0.0.5",
+      "aliases": [
+        "10.0.0.5",
+        "10.0.0.5/32"
+      ]
+    },
+    {
+      "id": "endpoint:10.0.0.6",
+      "aliases": [
+        "10.0.0.6",
+        "10.0.0.6/32"
+      ]
+    },
+    {
+      "id": "endpoint:10.0.0.9",
+      "aliases": [
+        "10.0.0.9",
+        "10.0.0.9/32"
+      ]
+    },
+    {
+      "id": "endpoint:10.0.0.10",
+      "aliases": [
+        "10.0.0.10",
+        "10.0.0.10/32"
+      ]
+    },
+    {
+      "id": "endpoint:10.0.0.11",
+      "aliases": [
+        "10.0.0.11",
+        "10.0.0.11/32"
+      ]
+    },
+    {
+      "id": "endpoint:10.0.0.12",
+      "aliases": [
+        "10.0.0.12",
+        "10.0.0.12/32"
+      ]
+    },
+    {
+      "id": "endpoint:10.0.0.13",
+      "aliases": [
+        "10.0.0.13",
+        "10.0.0.13/32"
+      ]
+    },
+    {
+      "id": "endpoint:10.0.0.20",
+      "aliases": [
+        "10.0.0.20",
+        "10.0.0.20/32"
+      ]
+    },
+    {
+      "id": "endpoint:10.0.0.100",
+      "aliases": [
+        "10.0.0.100",
+        "10.0.0.100/32"
+      ]
+    },
+    {
+      "id": "endpoint:192.168.1.2",
+      "aliases": [
+        "192.168.1.2",
+        "192.168.1.2/32"
+      ]
+    },
+    {
+      "id": "endpoint:192.168.1.50",
+      "aliases": [
+        "192.168.1.50",
+        "192.168.1.50/32"
+      ]
+    },
+    {
+      "id": "endpoint:192.168.2.2",
+      "aliases": [
+        "192.168.2.2",
+        "192.168.2.2/32"
+      ]
+    },
+    {
+      "id": "endpoint:192.168.3.10",
+      "aliases": [
+        "192.168.3.10",
+        "192.168.3.10/32"
+      ]
+    },
+    {
+      "id": "endpoint:fe80::1",
+      "aliases": [
+        "fe80::1"
+      ]
+    },
+    {
+      "id": "endpoint:multicast",
+      "aliases": [
+        "224.0.0.1",
+        "224.0.0.1/32"
+      ]
+    },
+    {
+      "id": "endpoint:broadcast",
+      "aliases": [
+        "255.255.255.255",
+        "255.255.255.255/32"
+      ]
+    },
+    {
+      "id": "device:s1",
+      "aliases": [
+        "s1",
+        "of:0000000000000001"
+      ]
+    },
+    {
+      "id": "device:s2",
+      "aliases": [
+        "s2",
+        "of:0000000000000002"
+      ]
+    },
+    {
+      "id": "device:s3",
+      "aliases": [
+        "s3",
+        "of:0000000000000003"
+      ]
+    },
+    {
+      "id": "device:s4",
+      "aliases": [
+        "s4",
+        "of:0000000000000004"
+      ]
+    }
+  ],
+  "ports": {
+    "of:0000000000000001": [
+      1,
+      2,
+      3,
+      4,
+      9
+    ],
+    "of:0000000000000002": [
+      1,
+      2,
+      4,
+      5,
+      6,
+      7,
+      8,
+      10
+    ],
+    "of:0000000000000003": [
+      1,
+      2,
+      3
+    ],
+    "of:0000000000000004": [
+      1,
+      2,
+      5
+    ]
+  },
+  "capabilities": [
+    "forwarding",
+    "acl",
+    "queue",
+    "bandwidth",
+    "latency",
+    "vlan"
+  ]
+}

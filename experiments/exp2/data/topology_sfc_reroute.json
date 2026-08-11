@@ -1,0 +1,107 @@
+{
+  "topology_id": "sfc-reroute-diamond-inventory",
+  "note": "sdn-intent-framework의 research/experiments/e1/data/topology_diamond.json 포팅 — cases_sfc_reroute.jsonl/defective_sfc_reroute.jsonl 전용 토폴로지(build_sfc_reroute_dataset.py가 이 파일을 대상으로 만들었다). device:s5는 의도적으로 ports가 없다 — sfc-unknown-waypoint-device 케이스가 '완전히 미지의 장치'(reference 카테고리)와 '엔티티는 알려져 있지만 포트가 없어 SFC 웨이포인트로 못 씀'(path_unknown_waypoint)을 구분하는 데 쓴다. 변경점은 topology.json과 동일하게 마스크 없는 IPv4 별칭에 /32 형태 추가뿐.",
+  "source": {
+    "repository": "local:sdn-intent-framework",
+    "commit": "WORKTREE"
+  },
+  "entities": [
+    {
+      "id": "host:h1",
+      "aliases": [
+        "h1",
+        "10.0.0.1",
+        "10.0.0.1/32"
+      ]
+    },
+    {
+      "id": "host:h2",
+      "aliases": [
+        "h2",
+        "10.0.0.2",
+        "10.0.0.2/32"
+      ]
+    },
+    {
+      "id": "host:h3",
+      "aliases": [
+        "h3",
+        "10.0.0.3",
+        "10.0.0.3/32"
+      ]
+    },
+    {
+      "id": "host:h4",
+      "aliases": [
+        "h4",
+        "10.0.0.4",
+        "10.0.0.4/32"
+      ]
+    },
+    {
+      "id": "device:s1",
+      "aliases": [
+        "s1",
+        "of:0000000000000001"
+      ]
+    },
+    {
+      "id": "device:s2",
+      "aliases": [
+        "s2",
+        "of:0000000000000002"
+      ]
+    },
+    {
+      "id": "device:s3",
+      "aliases": [
+        "s3",
+        "of:0000000000000003"
+      ]
+    },
+    {
+      "id": "device:s4",
+      "aliases": [
+        "s4",
+        "of:0000000000000004"
+      ]
+    },
+    {
+      "id": "device:s5",
+      "aliases": [
+        "s5",
+        "of:0000000000000005"
+      ]
+    }
+  ],
+  "ports": {
+    "of:0000000000000001": [
+      1,
+      2,
+      3,
+      4,
+      9
+    ],
+    "of:0000000000000002": [
+      1,
+      2
+    ],
+    "of:0000000000000003": [
+      1,
+      2
+    ],
+    "of:0000000000000004": [
+      1,
+      2,
+      3,
+      4
+    ]
+  },
+  "capabilities": [
+    "forwarding",
+    "acl",
+    "queue",
+    "sfc",
+    "reroute"
+  ]
+}

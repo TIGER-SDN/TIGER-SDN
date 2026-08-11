@@ -9,11 +9,14 @@
   - `Enforcement.avoid_device` → `IntentRouting.avoid_device`
     (tiger_sdn IR은 avoid_device를 enforcement가 아니라 routing에 둔다)
 
-`_check_path_constraints`(SFC 체인 연속성)는 포팅하지 않았다 — 연구 스키마는
-`IntentProgram.sfc_chain`이라는 프로그램 레벨 필드로 웨이포인트를 표현했지만,
-tiger_sdn IR은 그 개념이 없다(각 규칙이 자기 몫의 `enforcement.device`를 이미
-들고 있음, `compile/compiler.py` docstring 참고). 필요해지면 규칙별
-`sfc_role` 순서를 직접 비교하는 방식으로 별도 구현한다.
+`_check_path_constraints`(SFC 체인 연속성/순서, reroute avoid_device)는 Stage 8
+(Exp-2 sfc/reroute 확장 데이터셋, `docs/plan.md` Stage 8 "착수 시 결정 사항"
+참고)에서 이식했다. 연구 스키마는 `IntentProgram.sfc_chain`이라는 프로그램
+레벨 필드로 웨이포인트를 표현했지만, tiger_sdn IR은 그 개념이 없다 — 대신
+`ir/adapter.py`의 `from_research()`가 변환 시 그 체인을 sfc 규칙마다
+`routing.waypoints`에 그대로 복제해 둔다. 그래서 `_sfc_chain_of()`가 첫 sfc
+규칙의 `routing.waypoints`를 프로그램의 체인으로 취급해 원본 로직을
+그대로 적용한다.
 
 ── device 미지정 시 명시적 거부 ───────────────────────────────────────────
 `compile/compiler.py`의 `_resolve_device_id`는 `enforcement`가 없거나
@@ -37,7 +40,7 @@ from .topology import TopologyInventory
 
 __all__ = ["FindingCategory", "ValidationFinding", "ValidationReport", "verify_program"]
 
-FindingCategory = Literal["reference", "feasibility", "conflict"]
+FindingCategory = Literal["reference", "feasibility", "conflict", "path"]
 
 
 class ValidationFinding(StrictModel):
@@ -60,6 +63,7 @@ def verify_program(program: IntentProgram, inventory: TopologyInventory) -> Vali
         *_check_references(program, inventory),
         *_check_feasibility(program, inventory),
         *_check_conflicts(program, inventory),
+        *_check_path_constraints(program, inventory),
     ]
     return ValidationReport(findings=findings)
 
@@ -194,3 +198,148 @@ def _selector_covers(general: IntentSelector, specific: IntentSelector, aliases:
 def _canonical_endpoint(endpoint: EndpointRef, aliases: dict[str, str]) -> str:
     spelling = endpoint.host or endpoint.ip or ""
     return aliases.get(spelling, spelling)
+
+
+def _check_path_constraints(program: IntentProgram, inventory: TopologyInventory) -> list[ValidationFinding]:
+    """SFC 체인 연속성/순서, reroute avoid_device 검사.
+
+    reference(엔티티 존재)/conflict(쌍별 shadowing)/feasibility(단일 규칙
+    포트 범위) 어디에도 속하지 않는 교차 규칙/메타데이터 문제라 별도
+    path 카테고리로 분리했다.
+    """
+    return [
+        *_check_sfc_chain(program, inventory),
+        *_check_sfc_role_order(program),
+        *_check_avoid_device(program, inventory),
+    ]
+
+
+def _sfc_chain_of(program: IntentProgram) -> list[str] | None:
+    """SFC 규칙들의 routing.waypoints에서 프로그램 레벨 체인을 복원한다.
+
+    from_research()가 연구 스키마의 program.sfc_chain을 sfc 규칙마다
+    동일하게 routing.waypoints로 복제해 두므로, 첫 sfc 규칙의 waypoints를
+    그 프로그램의 체인으로 취급한다.
+    """
+    for rule in program.rules:
+        if rule.action == "sfc" and rule.routing and rule.routing.waypoints:
+            return rule.routing.waypoints
+    return None
+
+
+def _parse_chain_token(token: str) -> tuple[str, str | None]:
+    if token.count(":") <= 1:
+        return token, None
+    device, port = token.rsplit(":", 1)
+    return device, port
+
+
+def _coerce_port(value: str) -> int | None:
+    try:
+        return int(value)
+    except ValueError:
+        return None
+
+
+def _check_sfc_chain(program: IntentProgram, inventory: TopologyInventory) -> list[ValidationFinding]:
+    rules = program.rules
+    if not any(rule.action == "sfc" for rule in rules):
+        return []
+    chain = _sfc_chain_of(program) or []
+    if len(chain) != len(rules) - 1:
+        return [
+            ValidationFinding(
+                category="path", code="path_chain_length_mismatch", rule_indices=list(range(len(rules))),
+                message=f"sfc chain has {len(chain)} entries but program has {len(rules)} rules (expected {len(rules) - 1})",
+            )
+        ]
+    findings: list[ValidationFinding] = []
+    for k in range(1, len(rules)):
+        token = chain[k - 1]
+        device_part, port_part = _parse_chain_token(token)
+        token_device = inventory.aliases.get(device_part, device_part)
+        rule_device = _device_of(rules[k], inventory)
+        if rule_device is None or token_device != rule_device:
+            findings.append(
+                ValidationFinding(
+                    category="path", code="path_waypoint_device_mismatch", rule_indices=[k - 1, k],
+                    message=(
+                        f"sfc chain[{k - 1}]={token!r} does not match rule {k}'s device "
+                        f"{rules[k].enforcement.device if rules[k].enforcement else None!r}"
+                    ),
+                )
+            )
+            continue
+        ports = inventory.device_ports.get(token_device)
+        if ports is None:
+            findings.append(
+                ValidationFinding(
+                    category="path", code="path_unknown_waypoint", rule_indices=[k - 1, k],
+                    message=f"sfc chain[{k - 1}]={token!r} references an unknown device",
+                )
+            )
+            continue
+        token_port = _coerce_port(port_part) if port_part is not None else None
+        if port_part is not None and (token_port is None or token_port not in ports):
+            findings.append(
+                ValidationFinding(
+                    category="path", code="path_waypoint_port_out_of_range", rule_indices=[k - 1, k],
+                    message=f"sfc chain[{k - 1}]={token!r} port not valid on {device_part!r}",
+                )
+            )
+            continue
+        prev_device = _device_of(rules[k - 1], inventory)
+        if prev_device == token_device:
+            prev_enforcement = rules[k - 1].enforcement
+            prev_egress = prev_enforcement.egress_port if prev_enforcement else None
+            next_ingress = rules[k].selector.in_port
+            if token_port is None or prev_egress != token_port or next_ingress != token_port:
+                findings.append(
+                    ValidationFinding(
+                        category="path", code="path_port_discontinuity", rule_indices=[k - 1, k],
+                        message=f"same-device hop at rule {k} is not port-continuous with rule {k - 1}",
+                    )
+                )
+    return findings
+
+
+def _check_sfc_role_order(program: IntentProgram) -> list[ValidationFinding]:
+    sfc_indices = [i for i, rule in enumerate(program.rules) if rule.action == "sfc"]
+    if not sfc_indices:
+        return []
+    roles = [program.rules[i].sfc_role for i in sfc_indices]
+    invalid = (
+        roles[0] != "ingress"
+        or roles.count("ingress") > 1
+        or ("egress" in roles and roles.index("egress") != len(roles) - 1)
+    )
+    if not invalid:
+        return []
+    return [
+        ValidationFinding(
+            category="path", code="path_role_order_invalid", rule_indices=sfc_indices,
+            message=f"sfc_role sequence {roles} is not a valid ingress[...transit...][egress] order",
+        )
+    ]
+
+
+def _check_avoid_device(program: IntentProgram, inventory: TopologyInventory) -> list[ValidationFinding]:
+    findings: list[ValidationFinding] = []
+    for index, rule in enumerate(program.rules):
+        routing = rule.routing
+        if routing is None or routing.avoid_device is None:
+            continue
+        avoid = inventory.aliases.get(routing.avoid_device, routing.avoid_device)
+        device = _device_of(rule, inventory)
+        if device is not None and device == avoid:
+            findings.append(
+                ValidationFinding(
+                    category="path", code="path_avoid_device_conflict", rule_indices=[index],
+                    message=(
+                        f"rule {index}: enforcement.device "
+                        f"{rule.enforcement.device if rule.enforcement else None!r} conflicts with "
+                        f"avoid_device {routing.avoid_device!r}"
+                    ),
+                )
+            )
+    return findings

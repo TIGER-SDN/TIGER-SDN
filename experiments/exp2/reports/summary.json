@@ -1,0 +1,124 @@
+{
+  "scope": "component-level controlled evaluation of the B1-B2 validation boundary on 48 fixed IR fixtures (not an end-to-end LLM+IR system comparison)",
+  "B1": {
+    "any_defect": {
+      "tp": 4,
+      "fp": 0,
+      "fn": 21,
+      "tn": 23,
+      "precision": 1.0,
+      "recall": 0.16
+    },
+    "defect_positive_total": 25,
+    "true_negative_total": 23,
+    "rejected_count": 4,
+    "unknown_host_subset": {
+      "tp": 2,
+      "fp": 0,
+      "fn": 0,
+      "tn": 0,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    "observed_latency_ms": {
+      "mean": 0.035135773941874504,
+      "median": 0.03654789179563522,
+      "min": 0.004500150680541992,
+      "max": 0.0715949572622776,
+      "total": 1.6865171492099762
+    }
+  },
+  "B2": {
+    "any_defect": {
+      "tp": 25,
+      "fp": 0,
+      "fn": 0,
+      "tn": 23,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    "defect_positive_total": 25,
+    "true_negative_total": 23,
+    "rejected_count": 25,
+    "unknown_host_subset": {
+      "tp": 2,
+      "fp": 0,
+      "fn": 0,
+      "tn": 0,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    "observed_latency_ms": {
+      "mean": 0.027747533749789,
+      "median": 0.017804442904889584,
+      "min": 0.00971602275967598,
+      "max": 0.06554974243044853,
+      "total": 1.331881619989872
+    },
+    "by_category": {
+      "reference": {
+        "tp": 10,
+        "fp": 0,
+        "fn": 0,
+        "tn": 38,
+        "precision": 1.0,
+        "recall": 1.0
+      },
+      "feasibility": {
+        "tp": 10,
+        "fp": 0,
+        "fn": 0,
+        "tn": 38,
+        "precision": 1.0,
+        "recall": 1.0
+      },
+      "conflict": {
+        "tp": 8,
+        "fp": 0,
+        "fn": 0,
+        "tn": 40,
+        "precision": 1.0,
+        "recall": 1.0
+      },
+      "path": {
+        "tp": 0,
+        "fp": 0,
+        "fn": 0,
+        "tn": 48,
+        "precision": null,
+        "recall": null
+      }
+    },
+    "code_mismatch_cases": []
+  },
+  "B2_minus_B1": {
+    "precision": 0.0,
+    "recall": 0.84,
+    "incremental_rejections": 21,
+    "note": "incremental_rejections counts defect-positive cases B2 rejects that B1 does not; this is a potential reduction in cases that would reach a not-yet-built Digital Twin stage (Stage 7 twin/), not an already-measured Twin-execution saving."
+  },
+  "validator_overhead": {
+    "case_count": 23,
+    "b1_compiler_only_ms": {
+      "mean": 0.03762868152040502,
+      "median": 0.03875303082168102
+    },
+    "b2_validator_ms": {
+      "mean": 0.007540939132804456,
+      "median": 0.00713299959897995
+    },
+    "b2_compiler_ms": {
+      "mean": 0.03743573577831621,
+      "median": 0.038929982110857964
+    },
+    "b2_total_ms": {
+      "mean": 0.044976674911120666,
+      "median": 0.04603504203259945
+    },
+    "added_overhead_ms": {
+      "mean": 0.0073479933907156444,
+      "median": 0.0072820112109184265
+    },
+    "note": "The only apples-to-apples overhead figure: restricted to true-negative cases where both B1 and B2 run the compiler (B2 never short-circuits on these), so added_overhead_ms isolates the validator's own cost. Do NOT use each treatment's top-level observed_latency_ms for an overhead claim -- B2's population there includes defect-positive cases that skip the compiler entirely, which can make B2's overall mean look faster than B1's for reasons unrelated to validator cost."
+  }
+}

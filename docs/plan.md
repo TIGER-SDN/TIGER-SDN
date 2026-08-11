@@ -351,13 +351,54 @@ traffic_generator.py, bandwidth.py) + `onos_client.py`가 더 완성도 높은
 
 **완료 기준:** QoS 대역폭이 pass/fail 판정을 반환.
 
-### Stage 8. Exp-2 (최종 목표)
+### Stage 8. Exp-2 (최종 목표, 완료)
 
 이식한 코어를 실제로 실행하는 유일한 실험이다. 베이스:
 `research/safe_intent_sdn/e2_evaluation.py` + `research/experiments/e2/`.
 `main.py`/`api.py`에 있던 Repair Loop 이중 구현을 `orchestrate/pipeline.py`로 승격.
 
 **완료 기준:** 파싱/컴파일/검증 통과율 리포트 생성.
+
+**착수 시 결정 사항 (2026-08-11):**
+
+Exp-2(`e2_evaluation.py`)는 LLM을 전혀 호출하지 않는 **고정 IR conformance
+평가**다 — 손으로 만들고 검증한 IR 픽스처를 컴파일러/검증기에 통과시켜 B1(컴파일러만)
+vs B2(검증기+컴파일러)를 비교하는 RQ2 실험(컴파일러-검증기 경계 측정)이지,
+자연어→IR을 실제로 파싱하는 end-to-end 실험이 아니다. 완료 기준의 "파싱"은 이
+고정 IR 픽스처(JSONL)를 로드하고 어댑터로 변환하는 단계를 가리킨다 — 사람이
+이미 검증한 픽스처이므로 항상 100%. 실제 LLM 기반 자연어→IR 파싱(신규
+`orchestrate/pipeline.py` 파서)은 Exp-2 완료 기준에 포함되지 않는다 — Stage 9가
+그 파서를 필요로 하는 시점에 별도로 설계한다.
+
+- **데이터셋 범위:** 원본 48-case(`cases.jsonl`)뿐 아니라 sfc/reroute 확장
+  (`cases_sfc_reroute.jsonl`, 65-case)까지 포함한다. 단, 확장 데이터셋의 9개
+  `path` 카테고리 케이스(`path_unknown_waypoint`, `path_chain_length_mismatch`,
+  `path_port_discontinuity`, `path_waypoint_device_mismatch`,
+  `path_role_order_invalid`, `path_avoid_device_conflict`)는 Stage 6이
+  `FindingCategory`에서 `"path"`를 의도적으로 빼놓아 (통합 IR에
+  프로그램 레벨 `sfc_chain` 필드가 없어서) 현재 아무 카테고리도 못 잡는다.
+  이 케이스들을 쓰려면 `verify/grounding.py`에 `"path"` 카테고리와
+  SFC 체인 연속성 검사(`_check_sfc_chain`/`_check_sfc_role_order`/
+  `_check_avoid_device`, 원본 `research/safe_intent_sdn/validator.py:181-296`,
+  약 115 LOC)를 먼저 이식해야 한다 — Stage 8 안에서 처리한다(Stage 6 완료
+  기준을 소급 변경하지 않고, 그때 미룬 항목을 여기서 채우는 것).
+- **`build_dataset.py`/`build_sfc_reroute_dataset.py`(데이터셋 생성기)는
+  이식하지 않는다.** 둘 다 `research/experiments/e1/data/intents*.jsonl`에
+  의존하는데, e1은 GOLD-350/Exp-1이 대체하므로 이식 대상에서 제외된
+  상태다(위 "목표 레포 구조" 참고). 생성기 대신 그 출력물(`cases.jsonl`,
+  `defective_authored.jsonl`, `cases_sfc_reroute.jsonl`,
+  `defective_sfc_reroute.jsonl`)을 `gold350_eval.jsonl`과 같은 방식으로
+  고정 픽스처로 커밋한다 — 재생성이 필요해지면 그때 e1 데이터를 이식 예외로
+  들이는 걸 다시 논의한다.
+- **`orchestrate/pipeline.py`(Repair Loop 승격)는 이번 패스에서 분리한다.**
+  Exp-2 완료 기준(파싱/컴파일/검증 통과율 리포트, 위 정의대로 고정 IR
+  기준)과 무관하고, LLM 파서 재설계(구 `intent_parser.py`는 이식 대상이
+  아님 — Stage 3가 이미 `SYSTEM_PROMPT`만 뽑아 `prompts/intent_ir.md`로
+  옮겼다)가 별도로 필요해 범위가 크다. `repair_utils.py`(39 LOC,
+  `MAX_REPAIR_ATTEMPTS`/`build_repair_feedback`)는 이미 `verify/static.py`의
+  `StaticResult`와 구조가 동일해 이식 자체는 쉽지만, 그걸 실제로 구동할
+  루프 본체는 Stage 9(웹 UI)가 착수될 때 함께 설계하는 편이 낫다 — 그
+  전까지는 사문화될 코드이기 때문. 필요해지면 별도 이슈로 관리한다.
 
 ### Stage 9. 웹 UI (신규, 2026-08-10 결정)
 
@@ -606,7 +647,46 @@ JSON Schema 자동생성, secret redaction, 동시성에서 연구 트랙이 우
        자체는 정확)인데 `regression=False`(무관한 쌍이 막혔다고 오판)로
        FAIL이 났다. TwinVerifier의 버그가 아니라 스모크 테스트가 예약된 쌍을
        건드린 설계 실수였다 — 두 케이스 모두 `h1<->h4`로 바꿔 해결.
-- [ ] **Stage 8.** Exp-2 (최종)
+- [x] **Stage 8.** Exp-2 (최종, 2026-08-11)
+  - 착수 시 결정 사항(위 Stage 8 절 참고): sfc/reroute 확장 포함, "파싱"은
+    고정 IR conformance로 해석(LLM 없음), `orchestrate/pipeline.py`(Repair
+    Loop 승격)는 Stage 9로 이연.
+  - `src/tiger_sdn/verify/grounding.py`에 `path` `FindingCategory`와
+    SFC 체인 연속성/순서·reroute `avoid_device` 검사 이식(원본
+    `research/safe_intent_sdn/validator.py:181-296`). 통합 IR엔
+    `IntentProgram.sfc_chain`이 없으므로, `from_research()`가 sfc 규칙마다
+    복제해 두는 `routing.waypoints`에서 체인을 복원하는 방식으로 재설계했다
+    (`_sfc_chain_of`). `tests/test_verify_gold350.py`에 6개 신규 테스트.
+  - `experiments/exp2/data/`에 토폴로지 2종 포팅
+    (`research/experiments/e1/data/{topology,topology_diamond}.json`) —
+    각각 `cases.jsonl`/`cases_sfc_reroute.jsonl` 전용. 유일한 변경은 마스크
+    없는 IPv4 별칭마다 `/32` 형태 추가(안 하면 `EndpointRef`의 자동 정규화와
+    어긋나 정상 케이스도 `unknown_ip`로 오탐).
+  - `cases.jsonl`(48건)/`cases_sfc_reroute.jsonl`(65건)을 바이트 동일하게
+    고정 픽스처로 포팅. 생성기(`build_dataset.py`/`build_sfc_reroute_dataset.py`)는
+    이식하지 않음(위 "착수 시 결정 사항" 참고).
+  - `research/safe_intent_sdn/e2_evaluation.py`(`E2Case`/`E2Result`,
+    `validate_results`/`score_treatment`/`compute_validator_overhead`)를
+    `experiments/exp2/e2_evaluation.py`로 이식 — `tiger_sdn.ir`/
+    `tiger_sdn.verify`로 임포트만 교체, 채점 로직은 그대로.
+    `load_cases()`를 신규 추가해 연구 스키마 그대로인 커밋 파일을
+    `from_research()`로 통합 IR로 변환하는 다리 역할을 하게 했다(원본은
+    데이터 파일 스키마가 애초에 자기 모델과 같아서 이 단계가 없었다).
+  - `research/experiments/e2/{run_validation,score}.py`를
+    `experiments/exp2/{run,score}.py`로 이식 — `safe_intent_sdn.compiler`/
+    `validator` 대신 `tiger_sdn.compile`/`verify` 사용.
+  - 완료 기준 충족: `experiments/exp2/reports/{summary,sfc_reroute_summary}.json`
+    생성 확인. B2(검증기+컴파일러)가 두 데이터셋 모두에서 정오탐 100%
+    (48건: `any_defect` precision/recall 1.0/1.0, 25/25건 거부; sfc/reroute
+    65건: 1.0/1.0, 13/13건 거부, `path` 카테고리 단독으로도 1.0/1.0,
+    `code_mismatch_cases` 0건) — B1(컴파일러만)은 각각 4/25, 0/13건만 거부해
+    검증기의 실질적 기여가 드러난다. `experiments/exp2/logs/`에 첫 실행
+    로그를 커밋(하드 규율 #2 — LLM은 안 쓰지만 인용될 실행이므로 동일하게
+    취급). `tests/test_exp2_regression.py` 신규(4개): 고정 로그
+    재채점이 커밋된 리포트와 완전 일치하는지, 매번 새로 실행해도(타이밍만
+    바뀜) B2 정오탐 100%가 유지되는지 — grounding.py/compiler.py 회귀를
+    잡는 실질적 안전망. Stage 8 합류 후 `pytest` 69개 전부 초록(합류 시점
+    main 65개 + 신규 4개).
 - [ ] **Stage 9.** 웹 UI (신규)
 - [ ] **실행 로깅**
 - [ ] **전체 이식 완료 후 실험 재진행** (범위/일정 미정)
