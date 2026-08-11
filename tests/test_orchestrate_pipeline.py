@@ -200,3 +200,54 @@ def test_run_context_captures_artifacts_and_stage_timings(monkeypatch: pytest.Mo
         run.manifest.execution_time
     )
     assert run.manifest.final_decision == "APPROVE_WITHOUT_TWIN"
+
+
+def test_on_event_streams_stage_transitions_and_a_final_done(monkeypatch: pytest.MonkeyPatch):
+    """on_event는 Stage 9 API 레이어(이 PR 범위 밖)가 SSE에 연결하는 훅이다 —
+
+    on_event=None(기본값)이면 완전히 그대로 동작한다는 걸 다른 테스트들이 이미
+    보장하므로, 여기서는 콜백이 실제로 불릴 때 이벤트 흐름 자체만 확인한다.
+    """
+    monkeypatch.setattr(pipeline_module, "parse_intent", lambda intent, **kw: _accepted([VALID_FORWARD_RULE]))
+    events: list[dict] = []
+    result = run_pipeline(
+        "forward h1 to h2 on switch 1", model="fake-model", topology=TOPOLOGY,
+        onos_client=_FakeOnosClient(), on_event=events.append,
+    )
+
+    assert events[-1] == {"type": "done", "decision": result.decision, "reason": result.reason}
+    settled = [e for e in events if e["type"] == "stage" and e["status"] != "running"]
+    assert [(e["stage"], e["status"]) for e in settled] == [
+        ("parse", "done"), ("grounding", "done"), ("compile", "done"),
+        ("static_validation", "done"), ("twin", "skipped"),
+    ]
+    assert not any(e["type"] == "repair" for e in events)
+
+
+def test_on_event_reports_repair_attempts_on_grounding_failure(monkeypatch: pytest.MonkeyPatch):
+    call_count = 0
+
+    def fake_parse(intent, **kw):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            return _accepted([{**VALID_FORWARD_RULE, "enforcement": {"device": "switch 99"}}])
+        return _accepted([VALID_FORWARD_RULE])
+
+    monkeypatch.setattr(pipeline_module, "parse_intent", fake_parse)
+    events: list[dict] = []
+    result = run_pipeline(
+        "forward h1 to h2 on switch 99", model="fake-model", topology=TOPOLOGY,
+        onos_client=_FakeOnosClient(), on_event=events.append,
+    )
+
+    assert result.decision == "APPROVE_WITHOUT_TWIN"
+    assert result.repair_attempts == 1
+    repair_events = [e for e in events if e["type"] == "repair"]
+    assert len(repair_events) == 1
+    assert repair_events[0] == {"type": "repair", "attempt": 1, "reason": "grounding_failed"}
+    grounding_statuses = [
+        e["status"] for e in events
+        if e["type"] == "stage" and e["stage"] == "grounding" and e["status"] != "running"
+    ]
+    assert grounding_statuses == ["rejected", "done"]
