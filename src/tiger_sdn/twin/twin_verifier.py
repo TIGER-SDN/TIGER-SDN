@@ -1,7 +1,7 @@
 """src/tiger_sdn/twin/twin_verifier.py — Mininet 위 Digital Twin FlowRule 검증.
 
 원본: sdn-intent-framework의 research/safe_intent_sdn/twin/twin_verifier.py.
-아래 세 가지를 제외하면 내용 변경 없이 그대로 옮겼다 — 나머지는 원본의 설계와
+아래 네 가지를 제외하면 내용 변경 없이 그대로 옮겼다 — 나머지는 원본의 설계와
 주석(레이스 컨디션 대응, 헤드룸 클램핑 등 실측 기반 판단이 담겨 있어 그대로
 유지할 가치가 있다)을 보존했다.
 
@@ -27,6 +27,12 @@
    조립한 문자열에 리터럴 큰따옴표로 값을 감싸던 취약한 수동 인용을 없애고
    각 필드를 별도 인자로 넘긴다. `match`(콤마로만 구분되고 공백이 없는 문자열)
    자체도 `shlex.quote()`로 감싸 방어했다.
+4. **`verify()`에 `progress_cb` 파라미터를 추가했다** (Stage 9, docs/plan.md
+   참고) — 원본 `xai_pipeline`의 `TwinVerifier.verify(self, flowrule,
+   progress_cb=None)`와 동일한 패턴. `_log()`가 기존 `print()`에 더해
+   `progress_cb`가 설정돼 있으면 그것도 호출한다 — 웹 API(Stage 9)가 twin
+   진행 상황을 SSE로 스트리밍하는 데 쓴다. 기존 호출부(테스트 등)는
+   `progress_cb`를 안 넘기면 그대로 동작한다(기본값 `None`).
 
 Linux + root + Mininet + 접근 가능한 ONOS 컨트롤러가 필요하다. 없으면
 ``verify()``가 ``status="skipped"``를 반환한다.
@@ -42,7 +48,7 @@ import sys
 import time
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Callable, Optional
 
 from tiger_sdn.twin.bandwidth import measure_bandwidth, meets_target
 
@@ -230,9 +236,12 @@ class TwinVerifier:
         self.onos_password = onos_password
         self.controller_ip = controller_ip
         self.controller_port = controller_port
+        self._progress_cb: Callable[[str], None] | None = None
 
     def _log(self, msg: str) -> None:
         print(f"    [Twin] {msg}")
+        if self._progress_cb is not None:
+            self._progress_cb(msg)
 
     def verify(
         self,
@@ -243,6 +252,7 @@ class TwinVerifier:
         background_traffic: list[dict] | None = None,
         custom_data: dict | None = None,
         ip_map: dict[str, str] | None = None,
+        progress_cb: Callable[[str], None] | None = None,
     ) -> TwinResult:
         """``flowrule``을 twin에 배포하고 동작을 검증한다.
 
@@ -264,6 +274,8 @@ class TwinVerifier:
             TwinResult. bandwidth 프로브가 돌았으면 ``evidence``에 항상
             ``measured_mbps``가 담긴다.
         """
+        self._progress_cb = progress_cb
+
         if not isinstance(flowrule, dict):
             flowrule = flowrule.model_dump()
 
