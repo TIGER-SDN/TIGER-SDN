@@ -1,11 +1,25 @@
 """src/tiger_sdn/verify/schema.py — ONOS FlowRule 스키마 검증.
 
 원본: sdn-intent-framework의
-src/xai_pipeline/pipeline/stage3_static/schema_validator.py. 내용 변경 없이
-포팅했다 — `compile/onos.py`의 pydantic 모델(extra="forbid")과 달리 이 검증은
-priority/deviceId 형식처럼 타입만으로는 못 잡는 값 범위까지 보므로, 컴파일러가
-만든 FlowRule뿐 아니라 외부에서 들어온(예: ONOS에서 되읽은) FlowRule JSON도
-그대로 검증할 수 있게 dict 입력을 받는다.
+src/xai_pipeline/pipeline/stage3_static/schema_validator.py. `compile/onos.py`의
+pydantic 모델(extra="forbid")과 달리 이 검증은 priority/deviceId 형식처럼
+타입만으로는 못 잡는 값 범위까지 보므로, 컴파일러가 만든 FlowRule뿐 아니라
+외부에서 들어온(예: ONOS에서 되읽은) FlowRule JSON도 그대로 검증할 수 있게
+dict 입력을 받는다.
+
+── orchestrate.pipeline 배선 중 발견해 고친 버그: isPermanent 타입 불일치 ──
+원본은 `isPermanent: str`(ONOS REST 문서의 문자열 표기를 그대로 따름)만
+허용했는데, `compile/onos.py`의 `OnosFlow.isPermanent`는 `bool | str`이고
+`compile/compiler.py`가 실제로 채우는 값은 파이썬 `True`(bool)다 — pydantic은
+bool->str을 암묵 변환하지 않으므로, 실제 컴파일러 출력을 이 스키마에 그대로
+태우면 항상 "Input should be a valid string"으로 거부됐다. `static.py`/
+`schema.py` 자체 테스트는 손으로 만든 dict 픽스처만 썼고 `compile_prediction()`
+결과를 실제로 통과시켜 본 적이 없어서 이 불일치가 Stage 6 완료 이후로도 안
+드러났다 — orchestrate.pipeline이 parse->compile->verify를 실제로 이어붙이면서
+처음 걸렸다. Stage 7의 라이브 twin 검증(scripts/twin_smoke_test.sh)이 실
+ONOS에 `isPermanent: true`(JSON boolean)를 성공적으로 배포한 전례가 있으므로,
+bool 쪽이 실제로 맞는 표현이다 — `str`을 버리지 않고 `bool | str`로 넓혀
+문자열 표기도 여전히 받는다.
 """
 from __future__ import annotations
 
@@ -144,7 +158,7 @@ class _Treatment(BaseModel):
 class _FlowRule(BaseModel):
     priority: int
     timeout: int = 0
-    isPermanent: str = "true"
+    isPermanent: bool | str = True
     deviceId: str
     selector: _Selector
     treatment: Optional[_Treatment] = None  # 없으면 암묵적 DROP
@@ -177,10 +191,12 @@ class _FlowRule(BaseModel):
 
     @field_validator("isPermanent")
     @classmethod
-    def _is_permanent_str(cls, v: str) -> str:
+    def _is_permanent_valid(cls, v: bool | str) -> bool | str:
+        if isinstance(v, bool):
+            return v
         if v not in ("true", "false"):
             raise ValueError(
-                f"isPermanent는 'true' 또는 'false'여야 합니다. 현재: '{v}'"
+                f"isPermanent는 bool 또는 'true'/'false' 문자열이어야 합니다. 현재: '{v}'"
             )
         return v
 
