@@ -1,0 +1,108 @@
+{
+  "scope": "component-level controlled evaluation of the B1-B2 validation boundary on the 65-case sfc/reroute extension (not an end-to-end LLM+IR system comparison; never merged with the original 48-case report)",
+  "B1": {
+    "any_defect": {
+      "tp": 0,
+      "fp": 0,
+      "fn": 13,
+      "tn": 52,
+      "precision": null,
+      "recall": 0.0
+    },
+    "defect_positive_total": 13,
+    "true_negative_total": 52,
+    "rejected_count": 0,
+    "observed_latency_ms": {
+      "mean": 0.06171404025875605,
+      "median": 0.06964290514588356,
+      "min": 0.017972197383642197,
+      "max": 0.10874099098145962,
+      "total": 4.011412616819143
+    }
+  },
+  "B2": {
+    "any_defect": {
+      "tp": 13,
+      "fp": 0,
+      "fn": 0,
+      "tn": 52,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    "defect_positive_total": 13,
+    "true_negative_total": 52,
+    "rejected_count": 13,
+    "observed_latency_ms": {
+      "mean": 0.06016620363180454,
+      "median": 0.04999316297471523,
+      "min": 0.010157935321331024,
+      "max": 0.12467312626540661,
+      "total": 3.910803236067295
+    },
+    "by_category": {
+      "reference": {
+        "tp": 1,
+        "fp": 0,
+        "fn": 0,
+        "tn": 64,
+        "precision": 1.0,
+        "recall": 1.0
+      },
+      "feasibility": {
+        "tp": 4,
+        "fp": 0,
+        "fn": 0,
+        "tn": 61,
+        "precision": 1.0,
+        "recall": 1.0
+      },
+      "conflict": {
+        "tp": 1,
+        "fp": 0,
+        "fn": 0,
+        "tn": 64,
+        "precision": 1.0,
+        "recall": 1.0
+      },
+      "path": {
+        "tp": 8,
+        "fp": 0,
+        "fn": 0,
+        "tn": 57,
+        "precision": 1.0,
+        "recall": 1.0
+      }
+    },
+    "code_mismatch_cases": []
+  },
+  "B2_minus_B1": {
+    "precision": null,
+    "recall": 1.0,
+    "incremental_rejections": 13,
+    "note": "incremental_rejections counts defect-positive cases B2 rejects that B1 does not; this is a potential reduction in cases that would reach a not-yet-built Digital Twin stage (Stage 7 twin/), not an already-measured Twin-execution saving."
+  },
+  "validator_overhead": {
+    "case_count": 52,
+    "b1_compiler_only_ms": {
+      "mean": 0.06076845770271925,
+      "median": 0.06076099816709757
+    },
+    "b2_validator_ms": {
+      "mean": 0.010488174246767392,
+      "median": 0.010797637514770031
+    },
+    "b2_compiler_ms": {
+      "mean": 0.06088180592856728,
+      "median": 0.06108952220529318
+    },
+    "b2_total_ms": {
+      "mean": 0.07136998017533468,
+      "median": 0.0710460590198636
+    },
+    "added_overhead_ms": {
+      "mean": 0.010601522472615428,
+      "median": 0.010285060852766037
+    },
+    "note": "The only apples-to-apples overhead figure: restricted to true-negative cases where both B1 and B2 run the compiler (B2 never short-circuits on these), so added_overhead_ms isolates the validator's own cost. Do NOT use each treatment's top-level observed_latency_ms for an overhead claim -- B2's population there includes defect-positive cases that skip the compiler entirely, which can make B2's overall mean look faster than B1's for reasons unrelated to validator cost."
+  }
+}
