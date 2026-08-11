@@ -359,6 +359,47 @@ traffic_generator.py, bandwidth.py) + `onos_client.py`가 더 완성도 높은
 
 **완료 기준:** 파싱/컴파일/검증 통과율 리포트 생성.
 
+**착수 시 결정 사항 (2026-08-11):**
+
+Exp-2(`e2_evaluation.py`)는 LLM을 전혀 호출하지 않는 **고정 IR conformance
+평가**다 — 손으로 만들고 검증한 IR 픽스처를 컴파일러/검증기에 통과시켜 B1(컴파일러만)
+vs B2(검증기+컴파일러)를 비교하는 RQ2 실험(컴파일러-검증기 경계 측정)이지,
+자연어→IR을 실제로 파싱하는 end-to-end 실험이 아니다. 완료 기준의 "파싱"은 이
+고정 IR 픽스처(JSONL)를 로드하고 어댑터로 변환하는 단계를 가리킨다 — 사람이
+이미 검증한 픽스처이므로 항상 100%. 실제 LLM 기반 자연어→IR 파싱(신규
+`orchestrate/pipeline.py` 파서)은 Exp-2 완료 기준에 포함되지 않는다 — Stage 9가
+그 파서를 필요로 하는 시점에 별도로 설계한다.
+
+- **데이터셋 범위:** 원본 48-case(`cases.jsonl`)뿐 아니라 sfc/reroute 확장
+  (`cases_sfc_reroute.jsonl`, 65-case)까지 포함한다. 단, 확장 데이터셋의 9개
+  `path` 카테고리 케이스(`path_unknown_waypoint`, `path_chain_length_mismatch`,
+  `path_port_discontinuity`, `path_waypoint_device_mismatch`,
+  `path_role_order_invalid`, `path_avoid_device_conflict`)는 Stage 6이
+  `FindingCategory`에서 `"path"`를 의도적으로 빼놓아 (통합 IR에
+  프로그램 레벨 `sfc_chain` 필드가 없어서) 현재 아무 카테고리도 못 잡는다.
+  이 케이스들을 쓰려면 `verify/grounding.py`에 `"path"` 카테고리와
+  SFC 체인 연속성 검사(`_check_sfc_chain`/`_check_sfc_role_order`/
+  `_check_avoid_device`, 원본 `research/safe_intent_sdn/validator.py:181-296`,
+  약 115 LOC)를 먼저 이식해야 한다 — Stage 8 안에서 처리한다(Stage 6 완료
+  기준을 소급 변경하지 않고, 그때 미룬 항목을 여기서 채우는 것).
+- **`build_dataset.py`/`build_sfc_reroute_dataset.py`(데이터셋 생성기)는
+  이식하지 않는다.** 둘 다 `research/experiments/e1/data/intents*.jsonl`에
+  의존하는데, e1은 GOLD-350/Exp-1이 대체하므로 이식 대상에서 제외된
+  상태다(위 "목표 레포 구조" 참고). 생성기 대신 그 출력물(`cases.jsonl`,
+  `defective_authored.jsonl`, `cases_sfc_reroute.jsonl`,
+  `defective_sfc_reroute.jsonl`)을 `gold350_eval.jsonl`과 같은 방식으로
+  고정 픽스처로 커밋한다 — 재생성이 필요해지면 그때 e1 데이터를 이식 예외로
+  들이는 걸 다시 논의한다.
+- **`orchestrate/pipeline.py`(Repair Loop 승격)는 이번 패스에서 분리한다.**
+  Exp-2 완료 기준(파싱/컴파일/검증 통과율 리포트, 위 정의대로 고정 IR
+  기준)과 무관하고, LLM 파서 재설계(구 `intent_parser.py`는 이식 대상이
+  아님 — Stage 3가 이미 `SYSTEM_PROMPT`만 뽑아 `prompts/intent_ir.md`로
+  옮겼다)가 별도로 필요해 범위가 크다. `repair_utils.py`(39 LOC,
+  `MAX_REPAIR_ATTEMPTS`/`build_repair_feedback`)는 이미 `verify/static.py`의
+  `StaticResult`와 구조가 동일해 이식 자체는 쉽지만, 그걸 실제로 구동할
+  루프 본체는 Stage 9(웹 UI)가 착수될 때 함께 설계하는 편이 낫다 — 그
+  전까지는 사문화될 코드이기 때문. 필요해지면 별도 이슈로 관리한다.
+
 ### Stage 9. 웹 UI (신규, 2026-08-10 결정)
 
 이식한 파이프라인(IR → 컴파일러 → 검증기 → twin)을 자연어 인텐트 입력부터 결과
