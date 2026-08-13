@@ -174,15 +174,20 @@ async def api_run(req: RunRequest) -> StreamingResponse:
         fut = loop.run_in_executor(None, _run, req, q)
         while True:
             try:
-                msg = q.get_nowait()
-                yield msg
-                if '"type": "done"' in msg:
-                    await fut
-                    return
+                yield q.get_nowait()
             except std_queue.Empty:
                 if fut.done():
+                    # 큐를 완전히 비운다 — run_pipeline()이 자체 "done"(run_id 없음)을
+                    # 반환 직전에 먼저 내보내고, 그 뒤에야 _run()이 이어서
+                    # decision/deploy 단계와 run_id 있는 최종 "done"을 내보낸다.
+                    # 메시지 내용으로 조기 종료하면(예전 버그) 그 뒷부분이 전부
+                    # 유실된다 — 스레드가 끝나고 큐가 실제로 빌 때만 종료한다.
+                    while True:
+                        try:
+                            yield q.get_nowait()
+                        except std_queue.Empty:
+                            break
                     await fut
-                    yield _sse({"type": "done", "decision": "ERROR"})
                     return
                 await asyncio.sleep(0.05)
                 yield ": keepalive\n\n"

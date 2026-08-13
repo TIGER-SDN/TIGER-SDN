@@ -78,6 +78,10 @@ def test_run_streams_stage_and_decision_events_without_deploy(monkeypatch):
 
     def fake_run_pipeline(intent, *, model, topology, skip_twin, run_context, on_event):
         on_event({"type": "stage", "stage": "parse", "status": "done"})
+        # 실제 run_pipeline()은 반환 직전에 (run_id 없는) 자체 "done"을 먼저
+        # 내보낸다 — api_run()의 SSE 스트림이 그 시점에 조기 종료하지 않고
+        # 이 뒤에 오는 decision/최종 done까지 계속 흘려보내는지 검증한다.
+        on_event({"type": "done", "decision": "APPROVE_WITHOUT_TWIN", "reason": "ok"})
         return PipelineResult(
             decision="APPROVE_WITHOUT_TWIN", intent=intent, reason="ok",
             prediction=prediction, flow_set=FLOW_SET,
@@ -91,11 +95,16 @@ def test_run_streams_stage_and_decision_events_without_deploy(monkeypatch):
     events = _events(resp.text)
 
     assert {"type": "stage", "stage": "parse", "status": "done"} in events
+    done_events = [e for e in events if e["type"] == "done"]
+    assert len(done_events) == 2, "pipeline's internal done AND the API layer's final done must both survive"
     decision_events = [e for e in events if e["type"] == "decision"]
     assert decision_events[0]["report"]["decision"] == "APPROVE_WITHOUT_TWIN"
     assert not any(e.get("stage") == "deploy" for e in events)
-    done = events[-1]
-    assert done == {"type": "done", "run_id": done["run_id"], "decision": "APPROVE_WITHOUT_TWIN", "reason": "ok"}
+    final_done = done_events[-1]
+    assert final_done == {
+        "type": "done", "run_id": final_done["run_id"],
+        "decision": "APPROVE_WITHOUT_TWIN", "reason": "ok",
+    }
 
     manifest_paths = list((app_module.config.LOGS_DIR / "runs").glob("*/*/manifest.json"))
     assert len(manifest_paths) == 1
@@ -112,6 +121,7 @@ def test_run_deploys_on_approve_and_reports_flow_ids(monkeypatch):
     prediction = IntentPrediction.accept(PROGRAM)
 
     def fake_run_pipeline(intent, *, model, topology, skip_twin, run_context, on_event):
+        on_event({"type": "done", "decision": "APPROVE", "reason": "ok"})
         return PipelineResult(
             decision="APPROVE", intent=intent, reason="ok",
             prediction=prediction, flow_set=FLOW_SET,
