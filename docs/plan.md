@@ -421,6 +421,49 @@ vs B2(검증기+컴파일러)를 비교하는 RQ2 실험(컴파일러-검증기 
 항목 참고 — 완료 기준(웹 UI에서 확인 가능)은 아직 미충족이라 체크박스는
 그대로 둔다.
 
+### Exp-3. Ablation 실험 (신규, 2026-08-13 결정, 이슈 #37)
+
+Stage 9 파서/파이프라인이 실제 LLM + 실제 Digital Twin까지 end-to-end로 동작하는
+걸 확인한 뒤, "GOLD-350을 그냥 전부 파이프라인에 태워본다"는 안을 "이 시스템을
+안 썼을 때와 썼을 때 얼마나 다른가, 어느 단계가 실제로 무엇을 잡아내는가"를
+재는 ablation 실험으로 재설계했다. Exp-1(파서만)·Exp-2(컴파일러+검증기만, LLM
+없음) 둘 다 이 질문에 답 못 한다. Exp-1/Exp-2의 하네스·커밋된 로그는 건드리지
+않는다.
+
+**설계 — 4개 arm:** No-System(`direct_flow` 프롬프트로 LLM이 FlowRule 직접
+생성) / No-Grounding(그라운딩 게이트 스킵) / No-Static(정적검증 게이트 스킵) /
+Full(그대로). `run_pipeline()`에 `skip_grounding`/`skip_static_validation`/
+`max_repair_attempts`/`initial_prediction` 4개 kwarg를 추가해 지원한다(전부
+기본값 불변, `skip_twin`과 같은 패턴). `initial_prediction`으로 세 arm
+(no_grounding/no_static/full)이 attempt-0 LLM 파싱을 공유해(`capture-ir` 로그)
+LLM 비결정성이 arm 비교를 오염시키지 않게 한다. Tier B(실 twin)는 No-System과
+Full만 페어드로 비교한다(twin-호환 5개 카테고리, SFC 전부·h2↔h3 주 대상 케이스
+제외, 카테고리당 10개 고정 표본 50개 — `experiments/exp3/data/tierB_case_ids.json`).
+
+**설계 중 발견해 고친 core 버그:** `verify/static.py`의 복합 인텐트 내부충돌
+검사·SFC 외부충돌 스킵이 `intent_action` 필드에 의존하는데, 컴파일러가 그
+필드를 세팅한 적이 없어(원본 `xai_pipeline`은 냈지만 이 레포 컴파일러는 규칙을
+평평한 flow 리스트로 펴서 그 키 자체가 없음) 실제 파이프라인 출력에 대해 죽은
+코드였다. `orchestrate/pipeline.py`가 `static_validate()` 호출 직전에
+스탬핑하도록 수정.
+
+**설계 중 발견해 별도 이슈로 남긴 버그(이슈 #40):** `verify/grounding.py`의
+`_check_sfc_chain`/`_check_sfc_role_order`가 연구 스키마의 다중 규칙 SFC
+표현(규칙마다 sfc_role, 체인 길이=규칙수-1)을 전제하는데, 실제 배포된 프롬프트
+(`prompts/intent_ir.md`)와 `from_gold350()`은 SFC를 단일 규칙+`routing.
+waypoints`로 표현한다 — GOLD-350 SFC 50건 전부 규칙 1개인데, 그 경우
+`_check_sfc_chain`은 waypoints가 비어 있길 기대해서 실제로는 항상 거부한다.
+Exp-1은 그라운딩을 안 돌리고 Exp-2의 SFC 픽스처는 `from_research()`(다중 규칙)
+경유라, "실제 프로덕트 스키마 SFC 인텐트가 실제 그라운딩 게이트를 통과하는가"가
+이번에 처음 실행됐다. Exp-3 실행 전 고칠지, SFC 카테고리를 Tier A에서도
+"현재는 100% grounding_reject"로 해석하고 넘어갈지는 아직 미정.
+
+**진행 상황 (2026-08-13):** `experiments/exp3/`(`run.py`/`score.py`/
+`e3_evaluation.py`/`select_tier_b_cases.py`) 스캐폴딩 + 코어 kwarg 확장까지
+코드는 완료(PR #39), 전부 mock으로 검증됨. 실 LLM 파일럿(`--limit 30`)과 전수
+실행은 아직 안 함 — qwen/qwen3-8b 확정, 추가 모델(Qwen3.5 9B/Llama 3.1 8B/
+Granite 4.1 8B 검토 중) slug 미정.
+
 ### 실행 로깅 (Stage 2 직후 착수해도 무방)
 
 `research/safe_intent_sdn/run_context.py` + `schema.py`가 이 영역의 정본이다 -
