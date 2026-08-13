@@ -116,16 +116,17 @@ TIGER-SDN/
 │   ├── twin/                    Stage 7
 │   ├── backends/onos.py         Stage 5-7 (배포 백엔드로 격리)
 │   ├── runctx/                  실행 로깅 (완료, 이슈 #16)
-│   ├── parse/, orchestrate/pipeline.py  Stage 9 파서/파이프라인 부분 (완료)
-│   ├── explain/, deploy/        장기 보류
+│   ├── parse/, orchestrate/pipeline.py  Stage 9 파서/파이프라인 (완료)
+│   ├── explain/                 결정론적 최종 판정 (완료, Stage 9)
+│   ├── deploy/                  ONOS FlowRule 실배포 (완료, Stage 9)
+│   ├── api/                     FastAPI 앱 + static/{index,app.js,style.css} (완료, Stage 9)
 │   └── py.typed
 │
-├── scripts/                     Digital Twin 실검증 운영 스크립트 (Stage 7)
+├── scripts/                     Digital Twin 실검증 운영 스크립트 (Stage 7) +
+│   │                             Stage 9 개발 편의 스크립트 (이슈 #31)
 │   ├── installation/{setup,doctor}.sh
 │   └── onos.sh, smoke_test.sh, twin_smoke_test.sh, twin_smoke.py,
-│       start_mn_single3.sh
-│
-├── (웹 UI 디렉토리, 위치 미정 — Stage 9 착수 시 결정)
+│       start_mn_single3.sh, dev_server.sh
 │
 └── tests/
 ```
@@ -400,26 +401,51 @@ vs B2(검증기+컴파일러)를 비교하는 RQ2 실험(컴파일러-검증기 
   루프 본체는 Stage 9(웹 UI)가 착수될 때 함께 설계하는 편이 낫다 — 그
   전까지는 사문화될 코드이기 때문. 필요해지면 별도 이슈로 관리한다.
 
-### Stage 9. 웹 UI (신규, 2026-08-10 결정)
+### Stage 9. 웹 UI (신규, 2026-08-10 결정, 2026-08-13 완료)
 
 이식한 파이프라인(IR → 컴파일러 → 검증기 → twin)을 자연어 인텐트 입력부터 결과
 확인까지 브라우저에서 조작할 수 있게 하는 계층. `src/xai_pipeline/api.py` + 기존
 프론트엔드는 **그대로 이식하지 않는다** — 참고용으로만 보고 TIGER-SDN 구조(특히
 `IntentPrediction`/`IntentProgram` 스키마, `runctx` 로깅)에 맞게 새로 설계한다.
 
-착수 전 결정 필요: 프레임워크 선택, API와 UI를 같은 레포에 둘지 분리할지,
-배포 백엔드(`backends/onos.py`)와의 연결 방식. 착수 시점에 이 문서에 세부 계획을
-채운다.
+**착수 전 결정 필요 3가지, 이슈 #31 확인 후 착수 시점에 다음과 같이 확정:**
+
+- **프레임워크:** FastAPI + `static/`(HTML/JS/CSS) — 원본과 동일 구성(`api.py`
+  하나가 REST API와 UI를 같이 서빙, `uvicorn ...:app --port 8000` 한 프로세스).
+  새 프레임워크를 도입할 이유가 없었다(원본이 이미 이 구성으로 검증됨).
+- **레포 분리 여부:** 분리하지 않는다 — `src/tiger_sdn/api/`로 코어와 한 레포에
+  둔다. API가 `orchestrate.pipeline.run_pipeline()`을 인프로세스로 직접 호출하므로
+  분리하면 그 경계를 HTTP로 다시 감싸야 해서 이득이 없다.
+- **배포 백엔드 연결 방식:** `backends.onos.OnosClient`를 API 레이어가 직접
+  인스턴스화해서 쓴다(별도 배포 서비스 없음) — `deploy.Deployer`가 이미 이
+  클라이언트를 감싸고 있어 그대로 재사용.
+
+**추가로 이번 착수 시 확정한 스코프 결정(사용자 승인, 2026-08-11):**
+
+- **XAI 설명은 결정론적 판정만.** 원본 `stage5_xai/explainer.py`의 LLM
+  paraphrase 2차 호출(`self.client` 있을 때만 타는 선택적 분기)은 빼고,
+  템플릿 기반 `_compute_confidence`/`_build_decision_reason`/`_build_evidence`
+  로직만 `explain/decision.py`로 이식. `decision_reason`은 항상 결정론적 문자열.
+- **토폴로지 패널은 읽기 전용.** 커스텀 토폴로지 에디터(드래그/드롭, Apply/Cancel,
+  netcfg push)와 "라이브 트래픽 프리셋"(패킷 애니메이션 시뮬레이터)은 전부
+  후속 이슈로 이연 — `GET /api/topology`가 반환하는 토폴로지 하나만 표시.
+- **RAG는 v1에서 완전히 제외.** 토글조차 없음(숨김이 아니라 제거) — 별도
+  이슈(#10)에서 재작성 여부를 다룬다.
 
 **완료 기준:** 자연어 인텐트를 입력해 accepted/rejected 결과와 (accepted인 경우)
-컴파일된 FlowRule을 웹 UI에서 확인할 수 있다.
+컴파일된 FlowRule을 웹 UI에서 확인할 수 있다. **코드/테스트 레벨로는 충족**
+(FastAPI 앱 + SSE 스트림 + 정적 UI 전부 작성·연결됨, `pytest` 초록, 실제
+Docker/ONOS 대상 `scripts/dev_server.sh` end-to-end 확인 완료 — `/api/topology`가
+라이브 ONOS 데이터를 반환하는 것까지 확인함). **단, 실제 브라우저에서의 시각/조작
+확인은 아직 안 됨** — 이 작업을 수행한 에이전트 환경엔 브라우저 자동화 도구가
+없어, DOM id/onclick/CSS 클래스 상호 참조 검증과 `node --check` 문법 검사,
+실 HTTP 서빙 확인으로 갈음했다(CLAUDE.md의 UI 변경 규칙 참고). `./scripts/
+dev_server.sh` 띄운 뒤 브라우저로 최소 한 번 직접 확인하는 게 남은 작업이다.
 
-**파서/파이프라인 부분 완료 (2026-08-11), 웹 UI 자체는 별도 진행.** Stage 9는
-두 조각이다 — (1) 자연어를 실제로 IR로 바꾸고 배선하는 코어 로직
-(`parse/`, `orchestrate/pipeline.py`), (2) 그걸 브라우저에서 조작하게 하는
-웹 UI(프레임워크 결정 포함). 이번엔 (1)만 다룬다. 아래 "진행 현황"의 Stage 9
-항목 참고 — 완료 기준(웹 UI에서 확인 가능)은 아직 미충족이라 체크박스는
-그대로 둔다.
+**진행 순서:** 5개 서브스테이지로 나눠 진행 — 9.1 파서/파이프라인 코어(2026-08-11,
+PR #35), 9.2 FastAPI 앱(2026-08-13), 9.3 정적 UI 포팅(2026-08-13), 9.4 테스트
+편의 환경/이슈 #31(2026-08-13), 9.5 이 문서 갱신. 상세 내역은 아래 "진행 현황"
+참고.
 
 ### Exp-3. Ablation 실험 (신규, 2026-08-13 결정, 이슈 #37)
 
@@ -476,11 +502,10 @@ JSON Schema 자동생성, secret redaction, 동시성에서 연구 트랙이 우
 
 | 원본 | 이유 |
 |---|---|
-| `src/xai_pipeline/api.py` + UI | 그대로 이식은 안 함 — Stage 9에서 참고용으로만 보고 신규 설계 (2026-08-10 전: 논문 정량 결과와 무관하다는 이유로 완전 제외였으나, 방향 전환으로 Stage 9가 신설되며 "참고" 상태로 바뀜) |
+| `src/xai_pipeline/api.py` + UI | Stage 9에서 `src/tiger_sdn/api/{app.py,static/}`로 포팅 완료(2026-08-13) — 그대로 이식이 아니라 스코프를 트림한 재설계: RAG, 커스텀 토폴로지 에디터, 라이브 트래픽 프리셋 시뮬레이터, Digital Twin 패킷 애니메이션 오버레이, flow-state 캐시/Saved State 탭을 뺐다. `orchestrate.pipeline.run_pipeline()` 위에 얇은 SSE 레이어만 얹는 구조라 원본의 Stage1~6 인라인 오케스트레이션과도 다르다 |
 | `src/xai_pipeline/main.py` | Repair Loop만 승격, 나머지 버림 |
 | `src/xai_pipeline/evaluate.py` | Exp-1/Exp-2가 대체 |
-| `stage5_xai/explainer.py`, `stage6_deploy/deployer.py` | `explain/`/`deploy/` 자리는 목표 구조에 있으나 장기 보류 |
-| `stage1_intent/rag.py` | 매 요청 전량 재구축(임베딩 API 수백 회) - 이식이 아니라 재작성 필요 |
+| `stage1_intent/rag.py` | 매 요청 전량 재구축(임베딩 API 수백 회) - 이식이 아니라 재작성 필요 (이슈 #10) |
 | `research/experiments/e1/`, `e3/` | E1은 Exp-1이 대체, E3는 원시 로그 부재 |
 | `research/paper/` | figure 산출 코드 - 마감까지 손대지 않는다 |
 | `docs/dataset/GOLD350_VERIFICATION.md` | 시점 보고서. L-SEC-R01과 프롬프트 계보 등 유효한 사실은 Stage 3에 이미 흡수 |
@@ -737,8 +762,8 @@ JSON Schema 자동생성, secret redaction, 동시성에서 연구 트랙이 우
     바뀜) B2 정오탐 100%가 유지되는지 — grounding.py/compiler.py 회귀를
     잡는 실질적 안전망. Stage 8 합류 후 `pytest` 69개 전부 초록(합류 시점
     main 65개 + 신규 4개).
-- [ ] **Stage 9.** 웹 UI (신규)
-  - [x] 파서/파이프라인 부분 완료 (2026-08-11) — 웹 UI 자체(완료 기준)는 미착수.
+- [ ] **Stage 9.** 웹 UI (신규) — 코드/테스트 완료, 브라우저 수동 확인만 남음
+  - [x] **9.1 파서/파이프라인 코어** 완료 (2026-08-11, PR #35).
   - `src/tiger_sdn/parse/parser.py`: `sdn-intent-framework`의
     `stage1_intent/intent_parser.py` 구조를 베이스로 이식하되 RAG는 빼고
     (이미 "이식하지 않는 것" 결정 사항), 토폴로지 그라운딩도 파서 안에서
@@ -777,6 +802,67 @@ JSON Schema 자동생성, secret redaction, 동시성에서 연구 트랙이 우
     신규 — LLM 호출은 목으로 대체. `pytest` 105개 중 104개 초록(main 85개 +
     신규 20개; 나머지 1개는 `test_runctx.py`의 기존 Windows 경로 구분자
     문제로 이번 변경과 무관하게 원래도 실패 — stash로 확인함).
+  - [x] **9.2 FastAPI 앱** 완료 (2026-08-13). `src/tiger_sdn/api/app.py` —
+    `POST /api/run`(SSE, `orchestrate.pipeline.run_pipeline()`의 `on_event`
+    콜백을 큐로 그대로 흘림), `GET /api/topology`(ONOS 실시간 조회, 실패 시
+    `data/gold/topology_eval.json` 폴백 — twin 기본 다이아몬드와 dpid가
+    맞아떨어지는 평가용 정본 인벤토리라 별도 픽스처를 새로 만들지 않았다),
+    `GET`/`DELETE /api/logs`(`runctx` 매니페스트 글롭 — 손으로 만든 JSON
+    덤프가 아님). `explain/decision.py`(`build_decision`)와
+    `deploy/deployer.py`(`Deployer`)를 이번에 함께 이식 — Stage 6 이후
+    "장기 보류"였던 `explain/`/`deploy/` 자리를 채웠다. `tiger_sdn.twin.
+    TwinVerifier.verify()`에 `progress_cb` 훅, `orchestrate.pipeline.
+    run_pipeline()`에 `on_event` 훅을 추가(둘 다 additive, 기존 호출부/
+    테스트 영향 없음). `tests/test_api.py`(10개), `tests/test_explain_decision.py`
+    (9개), `tests/test_deploy.py`(4개) 신규.
+    - **버그 발견 및 수정 (9.3 포팅 중 교차 검증으로 발견):**
+      `run_pipeline()`이 반환 직전 자체 `"done"` 이벤트를 먼저 내보내는데,
+      `api_run()`의 SSE 스트림이 "done" 문자열이 보이면 즉시 종료하도록
+      짜여 있어 그 뒤에 나오는 `"decision"` 이벤트/`deploy` 스테이지/
+      run_id 있는 최종 `"done"`이 전부 유실됐다. 메시지 내용이 아니라
+      "백그라운드 스레드가 끝나고 큐가 실제로 빌 때"로 종료 조건을 바꿔
+      고쳤다.
+  - [x] **9.3 정적 UI 포팅** 완료 (2026-08-13). `sdn-intent-framework`의
+    `src/xai_pipeline/static/{index.html,app.js,style.css}`(합계 5404줄)를
+    `src/tiger_sdn/api/static/`로 포팅, TIGER-SDN으로 리브랜딩. 위 "착수
+    시 확정한 스코프 결정"대로 RAG/에디터/라이브 트래픽 프리셋/twin 패킷
+    애니메이션 오버레이(백엔드가 구조화된 `twin_info`/`twin_bw` 이벤트를
+    안 주므로 데이터 소스 자체가 없음)/flow-state 캐시를 뺐다 —
+    2668줄(index.html 236 + app.js 1305 + style.css 1130)로 트림. 스테이지
+    카드가 원본의 숫자 스테이지(`ev.stage: 1..6`)가 아니라 백엔드의 실제
+    문자열 스테이지(parse/grounding/compile/static_validation/twin/deploy)로
+    키잉되도록 재설계 — 필드 접근은 `pipeline.py`/`app.py`/각 모델 정의를
+    직접 대조해 하나하나 맞췄다(추측 없음). 위 SSE 종료조건 버그는 이 작업
+    중 교차검증으로 발견.
+    - **검증 범위와 한계:** 이 작업을 수행한 에이전트 환경엔 브라우저
+      자동화 도구가 없어 실제 시각/조작 확인은 못 했다. 대신 확인한 것 —
+      실 uvicorn으로 정적 파일 HTTP 서빙(200, 올바른 content-type),
+      `node --check`로 `app.js` 문법 검증, `app.js`의 모든
+      `getElementById`/`onclick` 대상과 `index.html`의 실제 id/핸들러
+      전수 대조(누락 0건), `app.js`가 참조하는 CSS 클래스가 `style.css`에
+      전부 정의돼 있는지 대조. `pytest` 전부 초록.
+  - [x] **9.4 테스트 편의 환경** 완료 (2026-08-13, 이슈 #31). `scripts/
+    dev_server.sh` 신규 — `scripts/onos.sh start` + `uv run uvicorn
+    tiger_sdn.api.app:app --reload`를 한 커맨드로. Digital Twin은 root가
+    필요하지만(`TwinVerifier._check_platform()`) root 없이 실행해도 서버는
+    정상 동작하고 twin만 `status="skipped"`로 표시 — `sudo -E env
+    "PATH=$PATH" ./scripts/dev_server.sh`로 실제 twin 검증까지 가능.
+    실 Docker/ONOS 대상으로 end-to-end 확인(`GET /api/topology`가 정적
+    폴백이 아니라 라이브 ONOS 장치 데이터를 반환하는 것까지 확인).
+    `scripts/README.md`에 `NOPASSWD:ALL`이 아니라 두 진입점 스크립트
+    (`dev_server.sh`/`twin_smoke_test.sh`)로 좁힌 sudoers 예시 문서화 —
+    Mininet의 Python API가 개별 서브프로세스가 아니라 프로세스 전체의
+    root 권한을 요구하므로 "명령 하나하나"가 아니라 "진입점 스크립트"가
+    실제로 의미 있는 최소 범위. `.env.example`은 Stage 3에서 이미 ONOS/
+    API 서버 변수를 다 갖추고 있어 변경 불필요.
+    - **부수 발견:** `dev_server.sh` 작성 중 `scripts/twin_smoke_test.sh`의
+      `require_project_environment()`에서 동일한 실버그 발견 — bash의
+      `[[ cond ]] || return`은 `return`에 인자가 없으면 실패한 테스트의
+      종료 코드(1)를 그대로 물려받는데, `set -e` 아래서 이 함수를 최상위
+      문장으로 호출하면 "아무 문제 없음" 경로에서도 스크립트가 조용히
+      죽는다(실제로 `dev_server.sh`에서 이 방식으로 재현됨: 비root +
+      `UV_PROJECT_ENVIRONMENT` 미설정 + `/mnt` 밖 — 가장 흔한 조합). 두
+      스크립트 모두 `return 0`으로 명시해 고쳤다.
 - [x] **실행 로깅** (완료, 이슈 #16)
   - `research/safe_intent_sdn/run_context.py` + `schema.py` -> `src/tiger_sdn/runctx/
     {run_context,schema}.py`. 이벤트 스트림/매니페스트/아티팩트 버저닝/secret
@@ -790,8 +876,11 @@ JSON Schema 자동생성, secret redaction, 동시성에서 연구 트랙이 우
     decision)는 `RunManifest`의 아티팩트 슬롯(`input_intent`/`generated_ir`/
     `compiled_policy`/`static_validation`/`twin_test_results`/`repair_history`)이
     이미 stage1~4 + repair loop를 커버한다 — 추가로 흡수할 필드 없음. `rag_k`(RAG)는
-    이식 대상에서 제외됐고, stage5/6(XAI 설명·실배포)는 장기 보류라 대응 슬롯이
-    없는 게 맞다.
+    이식 대상에서 제외됐고, stage5/6(XAI 설명·실배포)는 이 시점엔 장기
+    보류라 대응 슬롯이 없는 게 맞았다(이후 Stage 9에서 `explain/`/`deploy/`로
+    이식됐지만, `RunManifest`엔 여전히 대응 슬롯이 없다 — 그 결과는
+    `runctx`가 아니라 `api/app.py`가 SSE `"decision"`/`deploy` 스테이지
+    이벤트로 직접 실어 나른다).
   - `tests/test_runctx.py` 신규(16개, 원본 `research/tests/test_config_and_logging.py`
     포팅 — `AppSettings` 로딩 테스트만 제외). `pytest` 전부 초록(85개).
 - [ ] **전체 이식 완료 후 실험 재진행** (범위/일정 미정)

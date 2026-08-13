@@ -49,8 +49,14 @@ require_project_environment() {
   # script: a bare `sudo ./scripts/twin_smoke_test.sh` silently destroyed the
   # Windows .venv). A bare `sudo` strips UV_PROJECT_ENVIRONMENT even when set
   # in the invoking shell, so refuse instead of guessing.
-  [[ -n "${UV_PROJECT_ENVIRONMENT:-}" ]] && return
-  [[ "$PROJECT_ROOT" == /mnt/* ]] || return
+  #
+  # `return` (bare) inherits the exit status of the failed test that
+  # triggered it via `||` -- under `set -e`, a bare top-level call to this
+  # function then kills the whole script on the common "nothing to do" path
+  # (plain `sudo ./scripts/twin_smoke_test.sh` on a non-WSL2 host, i.e. most
+  # runs). Always return 0 explicitly here; only `die` should end the script.
+  [[ -n "${UV_PROJECT_ENVIRONMENT:-}" ]] && return 0
+  [[ "$PROJECT_ROOT" == /mnt/* ]] || return 0
   die "UV_PROJECT_ENVIRONMENT is not set and PROJECT_ROOT ($PROJECT_ROOT) is on a mounted drive -- 'uv run' would default to <repo>/.venv and can destroy a host-built venv living at that same path. Set it explicitly: sudo -E env \"PATH=\$PATH\" UV_PROJECT_ENVIRONMENT=\"\$HOME/.venvs/tiger-sdn\" $0"
 }
 

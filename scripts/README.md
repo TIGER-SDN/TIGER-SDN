@@ -78,6 +78,54 @@ sudo ./scripts/twin_smoke_test.sh
 ./scripts/onos.sh stop
 ```
 
+## 웹 UI 개발 서버 (issue #31)
+
+Stage 9 API+UI를 켜고 브라우저로 바로 찔러보려면:
+
+```bash
+./scripts/dev_server.sh
+```
+
+`scripts/onos.sh start` + `uv run uvicorn tiger_sdn.api.app:app --reload
+--port 8000`을 한 커맨드로 묶은 것 — 뜨면 `http://localhost:8000`으로 접속.
+ONOS는 종료 시 자동으로 멈추지 않는다(위 "실험 종료"와 동일하게 재사용 목적).
+
+Digital Twin은 Mininet이 커널 네트워크 네임스페이스를 직접 다뤄서 root가
+필요하다(`TwinVerifier._check_platform()`). **root 없이 그냥 실행해도 서버는
+정상 동작한다** — parsing/compile/정적 검증까지는 문제없이 돌고, Digital Twin
+단계만 `status="skipped"`(사유: "no root privileges")로 표시된다. 실제 twin
+검증까지 보려면 root로 실행:
+
+```bash
+sudo -E env "PATH=$PATH" ./scripts/dev_server.sh
+```
+
+(`sudo -E`만으로는 부족하다 — `PATH`의 secure_path가 `~/.local/bin`을 지워
+`uv`를 못 찾는다. `twin_smoke_test.sh`와 동일한 문제/해결책이다.)
+
+## Digital Twin sudo 편의 설정 (issue #31)
+
+`sdn-xai-pipeline`은 `NOPASSWD:ALL`을 sudoers에 등록해 매번 비밀번호 입력을
+생략했다 — 이 저장소는 그 방식을 쓰지 않는다(범위가 시스템 전체라 과도함).
+대신 실제로 root가 필요한 진입점(`dev_server.sh`, `twin_smoke_test.sh`)만
+좁혀서 등록한다. `visudo`로 편집:
+
+```
+# /etc/sudoers.d/tiger-sdn-twin  (반드시 visudo 또는 visudo -f로 편집 — 문법
+# 오류가 있으면 sudo 자체가 깨질 수 있다)
+your_username ALL=(root) NOPASSWD: /home/your_username/projects/TIGER-SDN/scripts/dev_server.sh, \
+                                    /home/your_username/projects/TIGER-SDN/scripts/twin_smoke_test.sh
+```
+
+절대 경로 두 개를 실제 클론 경로로 바꿔서 쓴다. 이렇게 하면 `mn`/`mn -c`/
+`ovs-vsctl`/`ovs-ofctl` 같은 개별 명령이 아니라 이 두 스크립트를 통해서만
+NOPASSWD가 적용된다 — Mininet의 Python API(`twin/twin_verifier.py`가 쓰는
+`mininet.net.Mininet`)는 개별 서브프로세스가 아니라 프로세스 전체가 root여야
+하므로, "명령 하나하나를 좁힌 sudoers"가 아니라 "root가 필요한 진입점 스크립트
+자체를 좁힌 sudoers"가 실제로 의미 있는 최소 범위다. NOPASSWD 없이 그냥 매번
+`sudo -E env "PATH=$PATH" ...`로 비밀번호를 입력해도 무방하다 — 서버/스모크
+테스트는 한 번 띄우면 계속 떠 있으므로 세션당 한 번이면 충분하다.
+
 ## 스크립트 역할
 
 | Script | Role |
@@ -88,6 +136,7 @@ sudo ./scripts/twin_smoke_test.sh
 | `smoke_test.sh` | Mininet 통신과 ONOS 장치 인식 자동 검증 (TIGER-SDN 코드 무관) |
 | `twin_smoke_test.sh` / `twin_smoke.py` | Stage 5 컴파일러 + Stage 7 TwinVerifier를 실 ONOS+Mininet에 대고 검증 |
 | `start_mn_single3.sh` | 단일 switch, host 3개 대화형 Mininet 실행 |
+| `dev_server.sh` | ONOS 시작 + Stage 9 API/UI 서버(`uvicorn`) 기동을 한 커맨드로 |
 
 ONOS는 TCP 6653(OpenFlow), 8101(SSH/Karaf), 8181(REST) 포트를 씁니다. 기본
 계정은 `onos`/`rocks` — `ONOS_USER`/`ONOS_PASSWORD` 환경변수로 재정의 가능.

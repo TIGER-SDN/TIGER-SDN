@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TIGER-SDN Pipeline</title>
+  <!--
+    Original: sdn-intent-framework's src/xai_pipeline/static/index.html (325 lines).
+    Stage 9 scope cuts applied here (see docs/plan.md) — this is an intentional
+    subset, not an incomplete port:
+      - RAG: no "Enable RAG" toggle.
+      - Custom topology editor: no edit-mode toolbar, node-properties panel,
+        Apply/Cancel-to-ONOS-netcfg, or topology preset picker. The topology
+        panel shows exactly one topology (GET /api/topology), read-only.
+      - Live traffic preset simulator: no "LIVE TRAFFIC" panel section, no BW
+        toggle (the backend's link data has no bandwidth field to color by).
+      - Digital Twin packet-animation overlay: the backend's twin only emits
+        plain-text progress lines (no structured twin_info/twin_bw events), so
+        twin progress renders as plain log lines in the stage card instead.
+      - Flow-state cache / "Load State": the FLOW RULES panel shows only the
+        live ONOS flow table — no tabs, no Saved State.
+  -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%233b82f6' stroke-width='2'><circle cx='6' cy='6' r='2.4'/><circle cx='18' cy='6' r='2.4'/><circle cx='12' cy='18' r='2.4'/><path d='M8 7l7 9M16 7l-7 9'/></svg>">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+</head>
+<body>
+<div id="app">
+
+  <!-- ── LEFT SIDEBAR ──────────────────────────────────────── -->
+  <aside id="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-icon">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#f9fafb" stroke-width="2">
+          <circle cx="6" cy="6" r="2.4"/>
+          <circle cx="18" cy="6" r="2.4"/>
+          <circle cx="12" cy="18" r="2.4"/>
+          <path d="M8 7l7 9M16 7l-7 9"/>
+        </svg>
+      </div>
+      <span class="logo-text">TIGER-SDN</span>
+      <button id="sidebar-toggle-btn" title="Collapse sidebar">◀</button>
+    </div>
+
+    <div class="sidebar-body">
+
+    <div class="sidebar-section-label">LLM SETTINGS</div>
+    <div class="sidebar-field">
+      <div class="sidebar-field-label">Model</div>
+      <select id="model-select" class="select">
+        <optgroup label="Gemini (API)">
+          <option value="gemini-3.1-flash-lite" selected>gemini-3.1-flash-lite</option>
+        </optgroup>
+        <optgroup label="OpenRouter (API)">
+          <option value="qwen/qwen3-8b">qwen3:8b</option>
+        </optgroup>
+        <optgroup label="Ollama (Local)">
+          <option value="gemma3:8b">gemma3:8b</option>
+        </optgroup>
+      </select>
+    </div>
+
+    <div class="sidebar-divider"></div>
+
+    <div class="sidebar-section-label">PIPELINE OPTIONS</div>
+    <div class="toggle-row">
+      <span class="toggle-label">Skip Digital Twin</span>
+      <label class="toggle">
+        <input type="checkbox" id="toggle-twin">
+        <span class="toggle-track"></span>
+      </label>
+    </div>
+    <div class="toggle-row">
+      <span class="toggle-label">Skip ONOS Deploy</span>
+      <label class="toggle">
+        <input type="checkbox" id="toggle-deploy">
+        <span class="toggle-track"></span>
+      </label>
+    </div>
+
+    <div class="sidebar-divider"></div>
+
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <div class="sidebar-section-label" style="margin-bottom:0">RUN HISTORY</div>
+      <button id="clear-history-btn" title="Clear all history" style="background:none;border:none;cursor:pointer;color:#6b7280;font-size:11px;padding:2px 4px;line-height:1;border-radius:4px" onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color='#6b7280'">✕ clear</button>
+    </div>
+    <div id="history-list"></div>
+
+    </div><!-- /.sidebar-body -->
+  </aside>
+
+  <!-- ── CENTER MAIN ──────────────────────────────────────── -->
+  <main id="main">
+
+    <div id="pipeline-area">
+      <div id="pipeline-progress" style="display:none">
+        <div id="pp-header">
+          <span id="pp-stage-name">Initializing...</span>
+          <span id="pp-right"><span id="pp-counter">0 / 6</span><span id="pp-pct"> · 0%</span></span>
+        </div>
+        <div id="pp-track"></div>
+        <div id="pp-steps"></div>
+      </div>
+
+      <div id="stages-section">
+        <!-- Dynamically rendered by app.js -->
+      </div>
+
+      <div id="decision-banner" style="display:none"></div>
+    </div>
+
+    <div id="intent-section">
+      <textarea
+        id="intent-input"
+        placeholder="Describe your network intent in natural language..."
+      ></textarea>
+
+      <div id="preset-toggle-row">
+        <button id="intent-preset-btn" class="topo-mode-btn">⊞ Presets</button>
+        <div id="intent-preset-menu" class="preset-menu">
+          <div class="preset-group-label">Block</div>
+          <div class="preset-item" data-intent="Block all traffic from 10.0.0.1 to 10.0.0.4 on switch 4">Block 10.0.0.1 → 10.0.0.4</div>
+          <div class="preset-item" data-intent="Block TCP traffic on port 22 destined for 10.0.0.2 on switch 1">Block SSH → 10.0.0.2</div>
+          <div class="preset-item" data-intent="Block all traffic from 10.0.0.3 to 10.0.0.4 on switch 4">Block 10.0.0.3 → 10.0.0.4</div>
+          <div class="preset-group-label">Forward</div>
+          <div class="preset-item" data-intent="Forward ICMP traffic destined for 10.0.0.1 through port 3 on switch 1">Forward ICMP → 10.0.0.1</div>
+          <div class="preset-item" data-intent="Forward TCP traffic on port 80 destined for 10.0.0.3 via port 2 on switch 1">Forward HTTP → 10.0.0.3</div>
+          <div class="preset-group-label">QoS / SFC / Reroute</div>
+          <div class="preset-item" data-intent="Apply QoS for video streaming from 10.0.0.1 to 10.0.0.4 on switch 1">QoS video 10.0.0.1 → 10.0.0.4</div>
+          <div class="preset-item" data-intent="Steer HTTP traffic from 10.0.0.1 to 10.0.0.4 through IDS at port 9, then forward out port 2 on switch 2">SFC: IDS 10.0.0.1 → 10.0.0.4</div>
+          <div class="preset-item" data-intent="Reroute traffic from 10.0.0.2 to 10.0.0.3 via switch 3 avoiding switch 2 on switch 1">Reroute via s3 (avoid s2)</div>
+          <div class="preset-group-label">Compound</div>
+          <div class="preset-item" data-intent="Allow HTTP from 10.0.0.1 to 10.0.0.2 via port 2 on switch 1, but block SSH from 10.0.0.1 to 10.0.0.2 on switch 1">Allow HTTP + Block SSH</div>
+          <div class="preset-item" data-intent="Block ICMP from 10.0.0.1 to 10.0.0.3 on switch 1 and apply QoS for video streaming from 10.0.0.2 to 10.0.0.4 on switch 1">Block ICMP + QoS</div>
+          <div class="preset-item" data-intent="Forward HTTP from 10.0.0.1 to 10.0.0.3 via port 2 on switch 1, and block all traffic from 10.0.0.2 to 10.0.0.4 on switch 2">Forward HTTP + Block (multi-sw)</div>
+        </div>
+      </div>
+
+      <button id="run-btn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+        Run Pipeline
+      </button>
+    </div>
+
+  </main>
+
+  <!-- ── PANEL RESIZE HANDLE ──────────────────────────────── -->
+  <div id="panel-resizer"></div>
+
+  <!-- ── RIGHT TOPOLOGY PANEL ─────────────────────────────── -->
+  <aside id="topology-panel">
+    <div class="topology-header">
+      <button id="topo-panel-toggle-btn" class="topo-panel-toggle" onclick="toggleTopoPanel()" title="Collapse/expand topology panel">
+        <span class="topology-title" id="topo-title">Live Network Topology</span>
+        <span id="topo-panel-arrow" class="topo-panel-arrow">▾</span>
+      </button>
+      <button id="layout-swap-btn" class="topo-mode-btn" title="Swap left/right layout">⇄</button>
+    </div>
+
+    <!-- Collapsible panel body -->
+    <div id="topo-panel-body">
+
+      <div id="topology-graph">
+        <div id="topology-placeholder" class="topo-placeholder">
+          Connecting to ONOS...
+        </div>
+      </div>
+
+      <div id="topo-info-scroll">
+        <div class="topo-info-section" id="section-metrics">
+          <div class="topo-info-toggle" onclick="toggleInfoSection('section-metrics')">
+            <span>METRICS</span><span class="toggle-arrow">▾</span>
+          </div>
+          <div class="topo-info-body">
+            <div id="metrics-grid">
+              <div class="metric-card">
+                <div class="metric-value" id="metric-switches">—</div>
+                <div class="metric-label">Switches</div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-value" id="metric-hosts">—</div>
+                <div class="metric-label">Hosts</div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-value" id="metric-links">—</div>
+                <div class="metric-label">Links</div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-value" id="metric-rules">—</div>
+                <div class="metric-label">Rules</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="topo-info-section" id="section-hostmap">
+          <div class="topo-info-toggle" onclick="toggleInfoSection('section-hostmap')">
+            <span>HOST IP MAP</span><span class="toggle-arrow">▾</span>
+          </div>
+          <div class="topo-info-body">
+            <div id="host-legend-section">
+              <div id="host-legend-body"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="topo-info-section" id="section-flowrules">
+          <div class="topo-info-toggle" onclick="toggleInfoSection('section-flowrules')">
+            <span>FLOW RULES</span><span class="toggle-arrow">▾</span>
+          </div>
+          <div class="topo-info-body">
+            <div id="flow-table-section">
+              <div class="flow-table-wrap">
+                <div class="flow-table-header">
+                  <div>Device</div>
+                  <div>Pri</div>
+                  <div>Match</div>
+                  <div>Action</div>
+                </div>
+                <div id="flow-table-body"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div><!-- /#topo-info-scroll -->
+
+    </div><!-- /#topo-panel-body -->
+  </aside>
+
+</div>
+<script src="app.js"></script>
+</body>
+</html>
