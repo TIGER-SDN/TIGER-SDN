@@ -251,3 +251,109 @@ def test_on_event_reports_repair_attempts_on_grounding_failure(monkeypatch: pyte
         if e["type"] == "stage" and e["stage"] == "grounding" and e["status"] != "running"
     ]
     assert grounding_statuses == ["rejected", "done"]
+
+
+# ── Exp-3 ablation kwarg (skip_grounding/skip_static_validation/
+# max_repair_attempts/initial_prediction) — 원본: 없음, 신규 (docs/plan.md
+# Exp-3, 이슈 #37 참고). 이 네 kwarg는 skip_twin과 같은 패턴(기본값 불변)이라
+# 위 test_skip_twin_flag_*와 같은 스타일로 검증한다.
+
+
+def test_skip_grounding_lets_a_nonexistent_switch_number_compile_silently(monkeypatch: pytest.MonkeyPatch):
+    """그라운딩을 끄면 컴파일러가 존재하지 않는 스위치 번호를 그냥 통과시킨다 —
+    Exp-3의 핵심 동기(그라운딩이 실제로 무엇을 잡아내는가)를 코드로 고정한다.
+    """
+    nonexistent_switch_rule = {**VALID_FORWARD_RULE, "enforcement": {"device": "switch 99"}}
+    monkeypatch.setattr(pipeline_module, "parse_intent", lambda intent, **kw: _accepted([nonexistent_switch_rule]))
+
+    result = run_pipeline(
+        "forward h1 to h2 on switch 99", model="fake-model", topology=TOPOLOGY,
+        onos_client=_FakeOnosClient(), skip_grounding=True,
+    )
+
+    assert result.grounding_report is None
+    assert result.flow_set is not None
+    assert result.flow_set.flows[0].deviceId == "of:0000000000000063"  # 존재하지 않는 switch 99, 에러 없음
+    assert result.decision == "APPROVE_WITHOUT_TWIN"
+
+
+def test_skip_static_validation_bypasses_the_static_gate(monkeypatch: pytest.MonkeyPatch):
+    """static_result는 아예 계산되지 않고 None으로 남는다 — 정적검증 자체가
+    실제로 뭘 잡아내는지는 tests/test_verify_gold350.py가 이미 커버하므로,
+    여기서는 게이트가 정말 안 도는지 배선만 확인한다."""
+    monkeypatch.setattr(pipeline_module, "parse_intent", lambda intent, **kw: _accepted([VALID_FORWARD_RULE]))
+
+    result = run_pipeline(
+        "forward h1 to h2 on switch 1", model="fake-model", topology=TOPOLOGY,
+        onos_client=_FakeOnosClient(), skip_static_validation=True,
+    )
+
+    assert result.static_result is None
+    assert result.flow_set is not None
+    assert result.decision == "APPROVE_WITHOUT_TWIN"
+
+
+def test_max_repair_attempts_override_exhausts_earlier_than_module_default(monkeypatch: pytest.MonkeyPatch):
+    unknown_host_rule = {**VALID_FORWARD_RULE, "selector": {"source": {"host": "h99"}, "destination": {"host": "h2"}}}
+    call_count = 0
+
+    def fake_parse(intent, **kw):
+        nonlocal call_count
+        call_count += 1
+        return _accepted([unknown_host_rule])
+
+    monkeypatch.setattr(pipeline_module, "parse_intent", fake_parse)
+    result = run_pipeline(
+        "forward from h99 to h2", model="fake-model", topology=TOPOLOGY,
+        onos_client=_FakeOnosClient(), max_repair_attempts=1,
+    )
+
+    assert result.decision == "REJECT"
+    assert result.repair_attempts == 1
+    assert call_count == 2  # attempt 0 + 1 재시도, MAX_REPAIR_ATTEMPTS(3)까지 안 감
+
+
+def test_initial_prediction_skips_the_first_parse_call(monkeypatch: pytest.MonkeyPatch):
+    """capture-ir/replay 설계 — attempt 0는 캡처된 IntentPrediction을 그대로 쓰고
+    parse_intent()는 repair가 걸린 attempt 1부터만 새로 불린다."""
+    unknown_host_rule = {**VALID_FORWARD_RULE, "selector": {"source": {"host": "h99"}, "destination": {"host": "h2"}}}
+    captured = from_gold350({"status": "accepted", "rules": [unknown_host_rule]})
+    call_count = 0
+
+    def fake_parse(intent, **kw):
+        nonlocal call_count
+        call_count += 1
+        return _accepted([VALID_FORWARD_RULE])
+
+    monkeypatch.setattr(pipeline_module, "parse_intent", fake_parse)
+    result = run_pipeline(
+        "forward from h99 to h2", model="fake-model", topology=TOPOLOGY,
+        onos_client=_FakeOnosClient(), initial_prediction=captured,
+    )
+
+    assert call_count == 1  # attempt 0는 initial_prediction 재사용, attempt 1만 새로 파싱
+    assert result.repair_attempts == 1
+    assert result.decision == "APPROVE_WITHOUT_TWIN"
+
+
+def test_skip_grounding_and_skip_static_together_is_single_shot(monkeypatch: pytest.MonkeyPatch):
+    """두 게이트를 동시에 끄면 repair를 트리거할 조건이 없어 attempt 0에서
+    항상 끝난다 — "5번째 arm"이 별도 처리 없이 공짜로 얻어지는 지점."""
+    call_count = 0
+
+    def fake_parse(intent, **kw):
+        nonlocal call_count
+        call_count += 1
+        return _accepted([VALID_FORWARD_RULE])
+
+    monkeypatch.setattr(pipeline_module, "parse_intent", fake_parse)
+    result = run_pipeline(
+        "forward h1 to h2 on switch 1", model="fake-model", topology=TOPOLOGY,
+        onos_client=_FakeOnosClient(), skip_grounding=True, skip_static_validation=True,
+    )
+
+    assert call_count == 1
+    assert result.repair_attempts == 0
+    assert result.grounding_report is None
+    assert result.static_result is None
+    assert result.decision == "APPROVE_WITHOUT_TWIN"
