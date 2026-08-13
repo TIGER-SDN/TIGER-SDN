@@ -70,7 +70,13 @@ def select_tier_b_cases(
         pool.sort()  # 재현성 — random.sample은 입력 순서에 의존하므로 정렬 후 고정 시드로 뽑는다.
         if len(pool) < per_category:
             raise ValueError(f"{category}: eligible pool ({len(pool)}) smaller than per_category ({per_category})")
-        rng = random.Random(seed)
+        # 카테고리별 파생 시드 — 같은 seed를 카테고리마다 새로 심으면(예:
+        # random.Random(seed)를 루프 안에서 매번 재생성) pool 크기가 같은
+        # 카테고리끼리 정렬된 pool에서 동일한 상대 인덱스를 뽑는다(직접 재현
+        # 확인: forwarding·security 둘 다 38개 풀에서 [1,6,7,8,14,15,17,21,23,28]로
+        # 완전히 겹침). 카테고리 이름을 시드에 섞어 서로 독립시킨다 — 순서
+        # 무관(카테고리 목록을 나중에 재배열해도 다른 카테고리의 표본이 안 바뀜).
+        rng = random.Random(f"{seed}:{category}")
         by_category[category] = sorted(rng.sample(pool, per_category))
     return by_category
 
