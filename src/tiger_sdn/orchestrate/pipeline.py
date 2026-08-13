@@ -227,6 +227,7 @@ def run_pipeline(
 
         if skip_grounding:
             grounding_report = None
+            emit("stage", stage="grounding", status="skipped")
         else:
             emit("stage", stage="grounding", status="running", attempt=attempt)
             with _stage(run_context, "grounding"):
@@ -265,10 +266,11 @@ def run_pipeline(
 
         if skip_static_validation:
             static_result = None
+            emit("stage", stage="static_validation", status="skipped")
         else:
             emit("stage", stage="static_validation", status="running", attempt=attempt)
             with _stage(run_context, "static_validation"):
-                static_flow_dict = flow_set.model_dump()
+                static_flow_dict = flow_set.model_dump(mode="json")
                 if prediction.program.is_compound:
                     static_flow_dict["intent_action"] = "compound"
                 elif prediction.program.single.action == "sfc":
