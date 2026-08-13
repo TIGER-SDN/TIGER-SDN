@@ -26,6 +26,7 @@ import json
 import queue as std_queue
 import shutil
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -51,6 +52,8 @@ _PACKAGE_DIR = Path(__file__).resolve().parent
 _REPO_ROOT = Path.cwd()
 _DEFAULT_TOPOLOGY_PATH = _REPO_ROOT / "data" / "gold" / "topology_eval.json"
 _INTENT_MAX_LEN = 1000  # 프롬프트 인젝션 및 과도한 입력 방지 (원본과 동일)
+_DEPLOY_MAX_ATTEMPTS = 3  # ONOS 순간 장애를 흡수하기 위한 고정 재시도 횟수
+_DEPLOY_RETRY_DELAY_S = 2.0
 
 app = FastAPI(title="TIGER-SDN Pipeline API")
 app.add_middleware(
@@ -103,6 +106,15 @@ def _run(req: RunRequest, q: std_queue.Queue) -> None:
     def emit(event: dict[str, Any]) -> None:
         q.put(_sse(event))
 
+    def emit_from_pipeline(event: dict[str, Any]) -> None:
+        # run_pipeline() emits its own "done" on every code path, but _run()
+        # always sends the canonical final "done" below (with run_id and a
+        # deploy-aware decision) once run_pipeline() returns — drop the
+        # internal one so exactly one "done" reaches the client.
+        if event.get("type") == "done":
+            return
+        emit(event)
+
     try:
         topology = _default_topology()
     except (OSError, json.JSONDecodeError) as exc:
@@ -124,13 +136,15 @@ def _run(req: RunRequest, q: std_queue.Queue) -> None:
             topology=topology,
             skip_twin=req.skip_twin,
             run_context=run,
-            on_event=emit,
+            on_event=emit_from_pipeline,
         )
     except Exception as exc:  # pragma: no cover — run_pipeline은 이미 대부분을 잡지만 안전망
         run.fail(exc)
         emit({"type": "error", "error": str(exc)})
         emit({"type": "done", "decision": "ERROR", "run_id": run.run_id})
         return
+
+    final_decision: str = result.decision
 
     if (
         result.prediction is not None
@@ -147,7 +161,19 @@ def _run(req: RunRequest, q: std_queue.Queue) -> None:
 
         if result.decision in ("APPROVE", "APPROVE_WITHOUT_TWIN") and not req.skip_deploy:
             emit({"type": "stage", "stage": "deploy", "status": "running"})
-            deploy_result = Deployer().deploy(flowrule)
+            deployer = Deployer()
+            deploy_result = deployer.deploy(flowrule)
+            attempt = 1
+            while not deploy_result.success and attempt < _DEPLOY_MAX_ATTEMPTS:
+                emit({
+                    "type": "progress", "stage": "deploy",
+                    "msg": f"deploy attempt {attempt} failed ({deploy_result.error}), retrying...",
+                })
+                time.sleep(_DEPLOY_RETRY_DELAY_S)
+                deploy_result = deployer.deploy(flowrule)
+                attempt += 1
+            if not deploy_result.success:
+                final_decision = "DEPLOY_FAILED"
             emit({
                 "type": "stage",
                 "stage": "deploy",
@@ -159,8 +185,8 @@ def _run(req: RunRequest, q: std_queue.Queue) -> None:
                 },
             })
 
-    run.finish(result.decision)
-    emit({"type": "done", "run_id": run.run_id, "decision": result.decision, "reason": result.reason})
+    run.finish(final_decision)
+    emit({"type": "done", "run_id": run.run_id, "decision": final_decision, "reason": result.reason})
 
 
 # ── API Routes ──────────────────────────────────────────────────────────────
@@ -177,11 +203,12 @@ async def api_run(req: RunRequest) -> StreamingResponse:
                 yield q.get_nowait()
             except std_queue.Empty:
                 if fut.done():
-                    # 큐를 완전히 비운다 — run_pipeline()이 자체 "done"(run_id 없음)을
-                    # 반환 직전에 먼저 내보내고, 그 뒤에야 _run()이 이어서
-                    # decision/deploy 단계와 run_id 있는 최종 "done"을 내보낸다.
-                    # 메시지 내용으로 조기 종료하면(예전 버그) 그 뒷부분이 전부
-                    # 유실된다 — 스레드가 끝나고 큐가 실제로 빌 때만 종료한다.
+                    # 큐를 완전히 비운다 — _run()은 백그라운드 스레드에서 큐에
+                    # 계속 이벤트를 넣다가 마지막에 run_id 있는 최종 "done"을
+                    # 내보내고 반환한다. fut.done()이 True가 된 시점에도 그
+                    # 이벤트들이 아직 큐에 남아있을 수 있으므로, 메시지 내용으로
+                    # 조기 종료하지 않고 스레드가 끝난 뒤 큐가 실제로 빌 때만
+                    # 종료한다.
                     while True:
                         try:
                             yield q.get_nowait()

@@ -79,8 +79,10 @@ def test_run_streams_stage_and_decision_events_without_deploy(monkeypatch):
     def fake_run_pipeline(intent, *, model, topology, skip_twin, run_context, on_event):
         on_event({"type": "stage", "stage": "parse", "status": "done"})
         # 실제 run_pipeline()은 반환 직전에 (run_id 없는) 자체 "done"을 먼저
-        # 내보낸다 — api_run()의 SSE 스트림이 그 시점에 조기 종료하지 않고
-        # 이 뒤에 오는 decision/최종 done까지 계속 흘려보내는지 검증한다.
+        # 내보낸다 — api_run()의 SSE 스트림이 그 시점에 조기 종료하지 않아야
+        # 하는 것은 물론, _run()의 emit_from_pipeline()이 이 내부 done을
+        # 걸러내 최종적으로 run_id 있는 done 하나만 클라이언트에 도달하는지도
+        # 검증한다.
         on_event({"type": "done", "decision": "APPROVE_WITHOUT_TWIN", "reason": "ok"})
         return PipelineResult(
             decision="APPROVE_WITHOUT_TWIN", intent=intent, reason="ok",
@@ -96,7 +98,7 @@ def test_run_streams_stage_and_decision_events_without_deploy(monkeypatch):
 
     assert {"type": "stage", "stage": "parse", "status": "done"} in events
     done_events = [e for e in events if e["type"] == "done"]
-    assert len(done_events) == 2, "pipeline's internal done AND the API layer's final done must both survive"
+    assert len(done_events) == 1, "run_pipeline's internal done must be filtered, leaving only the API layer's final done"
     decision_events = [e for e in events if e["type"] == "decision"]
     assert decision_events[0]["report"]["decision"] == "APPROVE_WITHOUT_TWIN"
     assert not any(e.get("stage") == "deploy" for e in events)
@@ -114,6 +116,24 @@ def test_run_streams_stage_and_decision_events_without_deploy(monkeypatch):
 
 class _FakeDeployer:
     def deploy(self, flowrule: dict) -> DeployResult:
+        return DeployResult(success=True, flow_ids=["0x1"])
+
+
+class _FakeFailingDeployer:
+    def deploy(self, flowrule: dict) -> DeployResult:
+        return DeployResult(success=False, error="onos unreachable")
+
+
+class _FlakyThenSuccessDeployer:
+    """처음 호출은 실패, 두 번째 호출부터 성공 — 재시도 경로 검증용."""
+
+    def __init__(self) -> None:
+        self._calls = 0
+
+    def deploy(self, flowrule: dict) -> DeployResult:
+        self._calls += 1
+        if self._calls == 1:
+            return DeployResult(success=False, error="transient onos blip")
         return DeployResult(success=True, flow_ids=["0x1"])
 
 
@@ -137,6 +157,73 @@ def test_run_deploys_on_approve_and_reports_flow_ids(monkeypatch):
     deploy_events = [e for e in events if e.get("stage") == "deploy"]
     assert deploy_events[-1]["status"] == "done"
     assert deploy_events[-1]["result"]["flow_ids"] == ["0x1"]
+    assert events[-1] == {
+        "type": "done", "run_id": events[-1]["run_id"], "decision": "APPROVE", "reason": "ok",
+    }
+
+
+def test_run_reflects_deploy_failure_in_decision(monkeypatch):
+    """정적/twin 검증은 통과했지만 실배포가 재시도 후에도 계속 실패한 경우,
+    최종 done과 매니페스트 양쪽 모두 순수 파이프라인 판정("APPROVE")이 아니라
+    "DEPLOY_FAILED"를 내야 한다 — 그래야 /api/logs 히스토리가 조용히 성공으로
+    남지 않는다."""
+    prediction = IntentPrediction.accept(PROGRAM)
+
+    def fake_run_pipeline(intent, *, model, topology, skip_twin, run_context, on_event):
+        on_event({"type": "done", "decision": "APPROVE", "reason": "ok"})
+        return PipelineResult(
+            decision="APPROVE", intent=intent, reason="ok",
+            prediction=prediction, flow_set=FLOW_SET,
+            static_result=StaticResult(passed=True),
+            twin_result=TwinResult(status="passed", checks={"a": True}),
+        )
+
+    monkeypatch.setattr(app_module, "run_pipeline", fake_run_pipeline)
+    monkeypatch.setattr(app_module, "Deployer", _FakeFailingDeployer)
+    monkeypatch.setattr(app_module.time, "sleep", lambda _seconds: None)
+
+    resp = client.post("/api/run", json={"intent": "block 10.0.0.1"})
+    events = _events(resp.text)
+    deploy_events = [e for e in events if e.get("stage") == "deploy"]
+    assert deploy_events[-1]["status"] == "error"
+    retry_progress = [e for e in events if e["type"] == "progress" and e.get("stage") == "deploy"]
+    assert len(retry_progress) == app_module._DEPLOY_MAX_ATTEMPTS - 1
+    final_done = events[-1]
+    assert final_done["type"] == "done"
+    assert final_done["decision"] == "DEPLOY_FAILED"
+
+    manifest_paths = list((app_module.config.LOGS_DIR / "runs").glob("*/*/manifest.json"))
+    assert len(manifest_paths) == 1
+    manifest = json.loads(manifest_paths[0].read_text())
+    assert manifest["final_decision"] == "DEPLOY_FAILED"
+
+
+def test_run_deploy_retries_and_succeeds_after_transient_failure(monkeypatch):
+    """첫 배포 시도가 일시적으로 실패해도 재시도로 살아나면 최종 decision은
+    "DEPLOY_FAILED"가 아니라 원래 파이프라인 판정을 유지해야 한다."""
+    prediction = IntentPrediction.accept(PROGRAM)
+
+    def fake_run_pipeline(intent, *, model, topology, skip_twin, run_context, on_event):
+        on_event({"type": "done", "decision": "APPROVE", "reason": "ok"})
+        return PipelineResult(
+            decision="APPROVE", intent=intent, reason="ok",
+            prediction=prediction, flow_set=FLOW_SET,
+            static_result=StaticResult(passed=True),
+            twin_result=TwinResult(status="passed", checks={"a": True}),
+        )
+
+    monkeypatch.setattr(app_module, "run_pipeline", fake_run_pipeline)
+    monkeypatch.setattr(app_module, "Deployer", _FlakyThenSuccessDeployer)
+    monkeypatch.setattr(app_module.time, "sleep", lambda _seconds: None)
+
+    resp = client.post("/api/run", json={"intent": "block 10.0.0.1"})
+    events = _events(resp.text)
+    deploy_events = [e for e in events if e.get("stage") == "deploy"]
+    assert deploy_events[-1]["status"] == "done"
+    assert deploy_events[-1]["result"]["flow_ids"] == ["0x1"]
+    retry_progress = [e for e in events if e["type"] == "progress" and e.get("stage") == "deploy"]
+    assert len(retry_progress) == 1
+    assert events[-1]["decision"] == "APPROVE"
 
 
 def test_run_handles_run_pipeline_exception(monkeypatch):
