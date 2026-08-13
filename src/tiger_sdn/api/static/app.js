@@ -183,6 +183,7 @@ function handleSSEEvent(ev) {
       _stageRunningAt[ev.stage] = Date.now();
       renderStage(ev.stage);
       renderPipelineProgress();
+      if (ev.stage === 'twin') state.twinActive = true;
     } else {
       ensureStageCard(ev.stage); // skipped처럼 running 없이 끝나는 경우 대비
 
@@ -208,8 +209,6 @@ function handleSSEEvent(ev) {
         }
       };
 
-      if (ev.stage === 'twin' && ev.status === 'running') state.twinActive = true;
-
       const ranAt = _stageRunningAt[ev.stage];
       if (ranAt) {
         const waited = Date.now() - ranAt;
@@ -222,11 +221,11 @@ function handleSSEEvent(ev) {
       }
     }
   } else if (ev.type === 'decision') {
-    state.decision = ev.decision;
+    state.decision = ev.report.decision;
     state.decisionReport = ev.report;
     state.confidenceBreakdown = (ev.report && ev.report.confidence_breakdown) || {};
     // REJECT 시 실패한 단계 모두 자동 펼치기
-    if (ev.decision === 'REJECT') {
+    if (ev.report.decision === 'REJECT') {
       state.stages.forEach(s => {
         if (s.status === 'error' || s.status === 'rejected') {
           s.expanded = true;
@@ -719,7 +718,12 @@ function renderDecision() {
   const reason = deployFailed
     ? `⚠ ONOS deploy failed — verification passed but the rule was not actually installed. ${baseReason}`.trim()
     : baseReason;
-  const title = deployFailed ? `${state.decision} (Deploy Failed)` : state.decision;
+  // "done"'s decision already reads DEPLOY_FAILED once the run has actually
+  // finished; the suffix only adds information in the brief window between
+  // the deploy stage's error event and that final "done" arriving.
+  const title = (deployFailed && !String(state.decision).includes('DEPLOY_FAILED'))
+    ? `${state.decision} (Deploy Failed)`
+    : state.decision;
 
   const conf = report.confidence != null ? Math.round(report.confidence * 100) : null;
   const confColor = conf >= 80 ? '#10b981' : conf >= 50 ? '#f59e0b' : '#ef4444';
