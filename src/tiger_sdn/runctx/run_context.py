@@ -47,7 +47,7 @@ __all__ = [
     "RunStatus",
 ]
 
-Decision = Literal["APPROVE", "REJECT", "HOLD"]
+Decision = Literal["APPROVE", "APPROVE_WITHOUT_TWIN", "REJECT", "ERROR", "DEPLOY_FAILED"]
 RunStatus = Literal["running", "succeeded", "failed"]
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 _SENSITIVE_KEY = re.compile(r"(api[_-]?key|password|authorization|secret|token)$", re.IGNORECASE)
