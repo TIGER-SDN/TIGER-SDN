@@ -27,6 +27,26 @@ SSE 스트림에 바로 연결할 수 있는 동기 콜백이 필요해서다. `
 동작이 완전히 그대로다(기존 호출부/테스트 영향 없음). twin 단계에서는
 `TwinVerifier.verify()`의 `progress_cb`에도 그대로 연결해, twin 내부
 세부 진행 메시지("(1) waiting for ONOS controller..." 등)까지 SSE로 나간다.
+
+**버그 수정 (Exp-3 설계 중 발견):** `verify/static.py`의 복합 인텐트 내부충돌
+검사·SFC 외부충돌 스킵은 `flowrule.get("intent_action") in ("compound",
+"sfc")`로 트리거되는데, `compile/onos.py`의 `OnosFlowSet`은 그 필드를 세팅한
+적이 없다(원본 `xai_pipeline` 컴파일러는 냈지만 이 레포 컴파일러는 규칙 N개를
+flow N개로 평평하게 펴서 `intent_action`/`sub_rules` 키 자체가 없음 —
+`twin_verifier.py` 자체 docstring에도 같은 갭이 이미 기록돼 있었다). 즉
+정적검증 호출 직전까지 이 검사는 실제 파이프라인 출력에 대해 죽은 코드였다.
+`_check_intra_conflicts`가 중첩 구조 없이 평평한 `flows` 리스트를 그대로
+읽으므로, `OnosFlowSet` 스키마를 바꾸지 않고 `static_validate()` 호출
+직전에 `intent_action`만 곁들이는 것으로 고친다.
+
+**Exp-3(ablation 실험)용 kwarg 4개** — `skip_grounding`/`skip_static_validation`/
+`max_repair_attempts`/`initial_prediction`. `skip_twin`과 정확히 같은 패턴:
+전부 기본값이 현재 동작과 동일해 기존 호출부·테스트는 무영향이다.
+`initial_prediction`은 attempt 0의 LLM 파싱을 건너뛰고 미리 캡처해 둔
+`IntentPrediction`을 그대로 쓴다 — 같은 케이스를 여러 arm(그라운딩만 끔/
+정적검증만 끔/full)에 태울 때 attempt 0가 LLM 비결정성 때문에 갈라지는 걸
+막기 위함. repair가 걸려 attempt 1부터 재파싱하는 건 arm마다 다른 게이트의
+피드백을 받으므로 그대로 갈라진다(측정 대상이지 막을 잡음이 아님).
 """
 
 from __future__ import annotations
@@ -112,6 +132,10 @@ def run_pipeline(
     onos_client: Optional[OnosClient] = None,
     run_context: Optional[RunContext] = None,
     on_event: Optional[Callable[[dict[str, Any]], None]] = None,
+    skip_grounding: bool = False,
+    skip_static_validation: bool = False,
+    max_repair_attempts: Optional[int] = None,
+    initial_prediction: Optional[IntentPrediction] = None,
 ) -> PipelineResult:
     """자연어 인텐트 하나를 파싱부터 twin 검증까지 끝까지 돌린다.
 
@@ -129,11 +153,24 @@ def run_pipeline(
             아티팩트를 저장한다. None이면 로깅 없이 순수 함수로 동작한다.
         on_event: 있으면 각 게이트 전이마다 ``{"type": ..., ...}`` dict로 호출된다
             (Stage 9 API 레이어의 SSE 스트림용). None이면 아무 것도 안 한다.
+        skip_grounding: True면 그라운딩 게이트(verify.grounding.verify_program())를
+            건너뛴다 — grounding_report는 None으로 남는다(Exp-3 ablation용).
+        skip_static_validation: True면 정적검증 게이트를 건너뛴다 — static_result는
+            None으로 남는다(Exp-3 ablation용).
+        max_repair_attempts: 있으면 모듈 상수 MAX_REPAIR_ATTEMPTS 대신 이 값을
+            쓴다(Exp-3 파일럿 실행용). None이면 기존 그대로.
+        initial_prediction: 있으면 attempt 0에서 parse_intent()를 새로 부르지
+            않고 이 값을 그대로 쓴다 — repair로 attempt 1 이상 진행되면 그때부터는
+            평소대로 새로 파싱한다(Exp-3의 capture-ir/replay 설계용).
     """
 
     def emit(event_type: str, **fields: Any) -> None:
         if on_event is not None:
             on_event({"type": event_type, **fields})
+
+    effective_max_attempts = MAX_REPAIR_ATTEMPTS if max_repair_attempts is None else max_repair_attempts
+    if effective_max_attempts < 0:
+        raise ValueError(f"max_repair_attempts must be >= 0, got {max_repair_attempts!r}")
 
     intent = intent.strip()
     if not intent:
@@ -160,17 +197,20 @@ def run_pipeline(
     repair_feedback: Optional[str] = None
     attempt = 0
 
-    for attempt in range(MAX_REPAIR_ATTEMPTS + 1):
-        emit("stage", stage="parse", status="running", attempt=attempt)
-        with _stage(run_context, "parse"):
-            try:
-                parse_result = parse_intent(
-                    intent, model=model, topology_prompt=topology_prompt, repair_feedback=repair_feedback,
-                )
-            except ValueError as exc:
-                emit("stage", stage="parse", status="error", error=str(exc))
-                return PipelineResult(decision="ERROR", intent=intent, reason=f"parse failed: {exc}", repair_attempts=attempt)
-            prediction = parse_result.prediction
+    for attempt in range(effective_max_attempts + 1):
+        if attempt == 0 and initial_prediction is not None:
+            prediction = initial_prediction
+        else:
+            emit("stage", stage="parse", status="running", attempt=attempt)
+            with _stage(run_context, "parse"):
+                try:
+                    parse_result = parse_intent(
+                        intent, model=model, topology_prompt=topology_prompt, repair_feedback=repair_feedback,
+                    )
+                except ValueError as exc:
+                    emit("stage", stage="parse", status="error", error=str(exc))
+                    return PipelineResult(decision="ERROR", intent=intent, reason=f"parse failed: {exc}", repair_attempts=attempt)
+                prediction = parse_result.prediction
 
         if prediction.status == "rejected":
             assert prediction.rejection is not None
@@ -185,23 +225,27 @@ def run_pipeline(
         if run_context is not None:
             run_context.save_artifact("generated_ir", prediction.model_dump(mode="json"))
 
-        emit("stage", stage="grounding", status="running", attempt=attempt)
-        with _stage(run_context, "grounding"):
-            grounding_report = verify_program(prediction.program, inventory)
-        if not grounding_report.is_valid:
-            findings = [f.model_dump(mode="json") for f in grounding_report.findings]
-            emit("stage", stage="grounding", status="rejected", findings=findings)
-            if attempt >= MAX_REPAIR_ATTEMPTS:
-                reason = f"grounding failed after {MAX_REPAIR_ATTEMPTS} repair attempts"
-                emit("done", decision="REJECT", reason=reason)
-                return PipelineResult(
-                    decision="REJECT", intent=intent, reason=reason,
-                    repair_attempts=attempt, prediction=prediction, grounding_report=grounding_report,
-                )
-            repair_feedback = build_repair_feedback_from_grounding(grounding_report, attempt + 1, MAX_REPAIR_ATTEMPTS)
-            emit("repair", attempt=attempt + 1, reason="grounding_failed")
-            continue
-        emit("stage", stage="grounding", status="done")
+        if skip_grounding:
+            grounding_report = None
+            emit("stage", stage="grounding", status="skipped")
+        else:
+            emit("stage", stage="grounding", status="running", attempt=attempt)
+            with _stage(run_context, "grounding"):
+                grounding_report = verify_program(prediction.program, inventory)
+            if not grounding_report.is_valid:
+                findings = [f.model_dump(mode="json") for f in grounding_report.findings]
+                emit("stage", stage="grounding", status="rejected", findings=findings)
+                if attempt >= effective_max_attempts:
+                    reason = f"grounding failed after {effective_max_attempts} repair attempts"
+                    emit("done", decision="REJECT", reason=reason)
+                    return PipelineResult(
+                        decision="REJECT", intent=intent, reason=reason,
+                        repair_attempts=attempt, prediction=prediction, grounding_report=grounding_report,
+                    )
+                repair_feedback = build_repair_feedback_from_grounding(grounding_report, attempt + 1, effective_max_attempts)
+                emit("repair", attempt=attempt + 1, reason="grounding_failed")
+                continue
+            emit("stage", stage="grounding", status="done")
 
         emit("stage", stage="compile", status="running", attempt=attempt)
         with _stage(run_context, "compile"):
@@ -220,33 +264,43 @@ def run_pipeline(
         if run_context is not None:
             run_context.save_artifact("compiled_policy", flowrule)
 
-        emit("stage", stage="static_validation", status="running", attempt=attempt)
-        with _stage(run_context, "static_validation"):
-            static_result = static_validate(flow_set.model_dump(), existing_flows=existing_flows)
-        static_result_dict = {
-            "passed": static_result.passed, "schema_errors": static_result.schema_errors,
-            "conflicts": static_result.conflicts, "warnings": static_result.warnings,
-        }
-        if run_context is not None:
-            run_context.save_artifact("static_validation", static_result_dict)
-        if not static_result.passed:
-            emit("stage", stage="static_validation", status="rejected", result=static_result_dict)
-            if attempt >= MAX_REPAIR_ATTEMPTS:
-                reason = f"static validation failed after {MAX_REPAIR_ATTEMPTS} repair attempts"
-                emit("done", decision="REJECT", reason=reason)
-                return PipelineResult(
-                    decision="REJECT", intent=intent, reason=reason,
-                    repair_attempts=attempt, prediction=prediction,
-                    grounding_report=grounding_report, flow_set=flow_set, static_result=static_result,
-                )
-            repair_feedback = build_repair_feedback_from_static(static_result, attempt + 1, MAX_REPAIR_ATTEMPTS)
-            emit("repair", attempt=attempt + 1, reason="static_validation_failed")
-            continue
-        emit("stage", stage="static_validation", status="done", result=static_result_dict)
+        if skip_static_validation:
+            static_result = None
+            emit("stage", stage="static_validation", status="skipped")
+        else:
+            emit("stage", stage="static_validation", status="running", attempt=attempt)
+            with _stage(run_context, "static_validation"):
+                static_flow_dict = flow_set.model_dump(mode="json")
+                if prediction.program.is_compound:
+                    static_flow_dict["intent_action"] = "compound"
+                elif prediction.program.single.action == "sfc":
+                    static_flow_dict["intent_action"] = "sfc"
+                static_result = static_validate(static_flow_dict, existing_flows=existing_flows)
+            static_result_dict = {
+                "passed": static_result.passed, "schema_errors": static_result.schema_errors,
+                "conflicts": static_result.conflicts, "warnings": static_result.warnings,
+            }
+            if run_context is not None:
+                run_context.save_artifact("static_validation", static_result_dict)
+            if not static_result.passed:
+                emit("stage", stage="static_validation", status="rejected", result=static_result_dict)
+                if attempt >= effective_max_attempts:
+                    reason = f"static validation failed after {effective_max_attempts} repair attempts"
+                    emit("done", decision="REJECT", reason=reason)
+                    return PipelineResult(
+                        decision="REJECT", intent=intent, reason=reason,
+                        repair_attempts=attempt, prediction=prediction,
+                        grounding_report=grounding_report, flow_set=flow_set, static_result=static_result,
+                    )
+                repair_feedback = build_repair_feedback_from_static(static_result, attempt + 1, effective_max_attempts)
+                emit("repair", attempt=attempt + 1, reason="static_validation_failed")
+                continue
+            emit("stage", stage="static_validation", status="done", result=static_result_dict)
 
         break
 
-    assert flow_set is not None and static_result is not None  # 위 for 루프가 break로만 여기 도달
+    assert flow_set is not None  # 위 for 루프가 break로만 여기 도달; static_result는
+    # skip_static_validation=True일 때 정당하게 None일 수 있다.
 
     emit("stage", stage="twin", status="running")
     with _stage(run_context, "twin"):
