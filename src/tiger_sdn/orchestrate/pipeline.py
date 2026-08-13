@@ -27,6 +27,17 @@ SSE 스트림에 바로 연결할 수 있는 동기 콜백이 필요해서다. `
 동작이 완전히 그대로다(기존 호출부/테스트 영향 없음). twin 단계에서는
 `TwinVerifier.verify()`의 `progress_cb`에도 그대로 연결해, twin 내부
 세부 진행 메시지("(1) waiting for ONOS controller..." 등)까지 SSE로 나간다.
+
+**버그 수정 (Exp-3 설계 중 발견):** `verify/static.py`의 복합 인텐트 내부충돌
+검사·SFC 외부충돌 스킵은 `flowrule.get("intent_action") in ("compound",
+"sfc")`로 트리거되는데, `compile/onos.py`의 `OnosFlowSet`은 그 필드를 세팅한
+적이 없다(원본 `xai_pipeline` 컴파일러는 냈지만 이 레포 컴파일러는 규칙 N개를
+flow N개로 평평하게 펴서 `intent_action`/`sub_rules` 키 자체가 없음 —
+`twin_verifier.py` 자체 docstring에도 같은 갭이 이미 기록돼 있었다). 즉
+정적검증 호출 직전까지 이 검사는 실제 파이프라인 출력에 대해 죽은 코드였다.
+`_check_intra_conflicts`가 중첩 구조 없이 평평한 `flows` 리스트를 그대로
+읽으므로, `OnosFlowSet` 스키마를 바꾸지 않고 `static_validate()` 호출
+직전에 `intent_action`만 곁들이는 것으로 고친다.
 """
 
 from __future__ import annotations
@@ -222,7 +233,12 @@ def run_pipeline(
 
         emit("stage", stage="static_validation", status="running", attempt=attempt)
         with _stage(run_context, "static_validation"):
-            static_result = static_validate(flow_set.model_dump(), existing_flows=existing_flows)
+            static_flow_dict = flow_set.model_dump()
+            if prediction.program.is_compound:
+                static_flow_dict["intent_action"] = "compound"
+            elif prediction.program.single.action == "sfc":
+                static_flow_dict["intent_action"] = "sfc"
+            static_result = static_validate(static_flow_dict, existing_flows=existing_flows)
         static_result_dict = {
             "passed": static_result.passed, "schema_errors": static_result.schema_errors,
             "conflicts": static_result.conflicts, "warnings": static_result.warnings,
