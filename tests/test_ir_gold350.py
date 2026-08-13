@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from tiger_sdn.ir import AdapterError, from_research, to_research
+from tiger_sdn.ir import AdapterError, IntentPrediction, from_research, to_research
 
 ROOT = Path(__file__).resolve().parents[1]
 GOLD_PATH = ROOT / "data" / "gold" / "gold.jsonl"
@@ -37,6 +37,25 @@ def test_all_accepted_cases_load_without_failure():
             failures.append((case["id"], repr(exc)))
 
     assert failures == []
+
+
+def test_intent_prediction_pydantic_json_round_trip_is_exact():
+    """orchestrate.pipeline의 capture-ir/replay 설계(Exp-3, 이슈 #37)가
+    IntentPrediction을 ``model_dump(mode="json")``로 로그에 저장했다가
+    ``model_validate()``로 다시 읽어 ``initial_prediction``에 넘기는 걸
+    전제한다 — 이건 to_research() 어댑터 왕복(위 테스트)과 다른 층이라
+    (pydantic 자체의 JSON 직렬화 충실도), GOLD-350 accepted 전 케이스로
+    routing.waypoints/qos 같은 중첩 optional 필드까지 별도로 확인한다.
+    """
+    cases = _load_cases()
+    accepted = [c for c in cases if c["expected"]["status"] == "accepted"]
+
+    for case in accepted:
+        prediction = from_research(case["expected"])
+        dumped = prediction.model_dump(mode="json")
+        restored = IntentPrediction.model_validate(dumped)
+        assert restored == prediction, case["id"]
+        assert restored.model_dump(mode="json") == dumped, case["id"]
 
 
 def test_all_rejected_cases_load_without_failure():
