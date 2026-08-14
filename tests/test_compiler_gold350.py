@@ -74,6 +74,34 @@ def test_rejected_prediction_cannot_be_compiled():
         compile_prediction(prediction, endpoint_ips=ENDPOINT_IPS)
 
 
+def test_port_zero_raises_compilation_error():
+    """IR의 src_port/dst_port는 0을 허용하지만(ge=0) ONOS TransportCriterion의
+    tcpPort/udpPort는 1 이상만 유효하다 — port=0은 pydantic ValidationError가
+    아니라 CompilationError로 거부되어야 한다."""
+    prediction = from_research(
+        {
+            "status": "accepted",
+            "program": {
+                "rules": [
+                    {
+                        "intent_type": "forwarding",
+                        "action": "forward",
+                        "selector": {
+                            "source": {"host": "h1"},
+                            "destination": {"host": "h2"},
+                            "protocol": "tcp",
+                            "dst_port": 0,
+                        },
+                        "enforcement": {"device": "of:0000000000000001"},
+                    }
+                ]
+            },
+        }
+    )
+    with pytest.raises(CompilationError):
+        compile_prediction(prediction, endpoint_ips=ENDPOINT_IPS)
+
+
 def test_block_rule_has_no_treatment():
     prediction = from_research(
         {
