@@ -222,28 +222,51 @@ def per_arm_summary(cases: list[E3Case], results: list[E3Result]) -> dict[str, A
 def stage_contribution(
     no_gate_results: list[E3Result], full_results: list[E3Result], *, diag_field: str,
 ) -> dict[str, Any]:
-    """"A(게이트를 뺀 arm)가 조용히 승인했을 케이스 중 B(full)가 실제로 막은 비율."
+    """"A(게이트를 뺀 arm)가 조용히 승인했을 케이스 중 B(full)가 실제로 잡아낸 비율.
 
     `diag_field`는 "grounding_findings" 또는 "static_conflicts" — 그 arm에서
     게이트가 안 돌았어도 run.py가 진단용으로 채워둔 값이라, "게이트가 있었으면
     뭘 잡았을지"를 그대로 쓸 수 있다.
+
+    "잡아냄"을 REJECT로 끝난 것만 세면 안 된다 — full의 repair loop가 게이트의
+    피드백을 받아 LLM이 문제를 실제로 고치고 승인으로 끝나는 경우가 많다(직접
+    관측: qwen 350케이스 전수에서 그라운딩 3건 중 2건, 정적검증 3건 중 3건이
+    이 경로였다 — REJECT로만 세면 각각 33%/0%로 나오지만 실제로는 6/6 전부
+    잡혔다). full이 REJECT면 확실한 catch, full이 APPROVE인데 그 arm 자신의
+    `diag_field`에 더는 그 문제가 없으면(같은 finding이 사라짐) repair가
+    고쳐서 통과한 것 — 둘 다 "이 게이트가 없었으면 조용히 나갔을 문제를
+    막았다"는 점에서 동일하게 기여로 센다. full이 APPROVE인데 finding이 여전히
+    남아있으면(예: Redundancy/Generalization 같은 경고 전용 conflict — REJECT
+    사유가 아니라 게이트를 안 막음) 진짜로 못 잡은 것이다.
     """
     by_id_full = {r.case_id: r for r in full_results}
     would_silently_approve = [
         r.case_id for r in no_gate_results
         if r.decision in ("APPROVE", "APPROVE_WITHOUT_TWIN") and getattr(r, diag_field)
     ]
-    caught_by_full = [
-        case_id for case_id in would_silently_approve
-        if by_id_full[case_id].decision not in ("APPROVE", "APPROVE_WITHOUT_TWIN")
-    ]
+    rejected_by_full: list[str] = []
+    fixed_by_full: list[str] = []
+    not_caught_by_full: list[str] = []
+    for case_id in would_silently_approve:
+        full_result = by_id_full[case_id]
+        if full_result.decision not in ("APPROVE", "APPROVE_WITHOUT_TWIN"):
+            rejected_by_full.append(case_id)
+        elif not getattr(full_result, diag_field):
+            fixed_by_full.append(case_id)
+        else:
+            not_caught_by_full.append(case_id)
+
+    n = len(would_silently_approve)
+    caught = len(rejected_by_full) + len(fixed_by_full)
     return {
-        "silently_approved_count": len(would_silently_approve),
-        "caught_by_full_count": len(caught_by_full),
-        "marginal_catch_rate": (
-            len(caught_by_full) / len(would_silently_approve) if would_silently_approve else None
-        ),
-        "case_ids": would_silently_approve,
+        "silently_approved_count": n,
+        "rejected_by_full_count": len(rejected_by_full),
+        "fixed_by_full_count": len(fixed_by_full),
+        "not_caught_by_full_count": len(not_caught_by_full),
+        "real_catch_rate": caught / n if n else None,
+        "case_ids": {
+            "rejected": rejected_by_full, "fixed": fixed_by_full, "not_caught": not_caught_by_full,
+        },
     }
 
 
