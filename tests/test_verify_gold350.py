@@ -362,6 +362,18 @@ def test_verify_program_accepts_single_rule_sfc_with_valid_waypoints(inventory: 
     assert report.is_valid
 
 
+def test_verify_program_accepts_single_rule_sfc_with_alias_waypoint(inventory: TopologyInventory):
+    """실 LLM 출력은 정식 ONOS ID("of:0000000000000001:9")가 아니라 사람이
+    읽는 별칭("s1:9")으로 waypoint를 낼 수 있다 — 콜론 1개짜리라 예전
+    _parse_chain_token의 콜론-개수 휴리스틱이 device_part="s1:9"(포트 없음)로
+    잘못 쪼개 unknown_device로 오탐했다. 실제 파일럿에서 이 형태 때문에
+    grounding이 실패 -> repair loop가 3번 다 재시도(매번 실 LLM 콜)하느라
+    케이스 하나가 멎은 것처럼 보일 정도로 느려지는 걸로 발견됨."""
+    rule = _single_rule_sfc(device="s1", egress_port=9, waypoints=["s1:9"])
+    report = verify_program(IntentProgram(rules=[rule]), inventory)
+    assert report.is_valid
+
+
 def test_verify_program_rejects_single_rule_sfc_unknown_waypoint_device(inventory: TopologyInventory):
     rule = _single_rule_sfc(device="s1", egress_port=9, waypoints=["no-such-switch:1"])
     report = verify_program(IntentProgram(rules=[rule]), inventory)

@@ -227,11 +227,22 @@ def _sfc_chain_of(program: IntentProgram) -> list[str] | None:
     return None
 
 
-def _parse_chain_token(token: str) -> tuple[str, str | None]:
-    if token.count(":") <= 1:
+def _parse_chain_token(token: str, inventory: TopologyInventory) -> tuple[str, str | None]:
+    """토큰을 device 별칭과 포트로 분리한다.
+
+    콜론 개수만으로는 못 나눈다 — ``"of:0000000000000001"``(ONOS 정식 ID) 자체가
+    이미 콜론을 하나 포함해서, 포트 없는 정식 ID(콜론 1개)와 사람이 읽는 별칭+포트
+    (예: 실제 LLM이 낸 ``"s1:9"``, 이것도 콜론 1개)를 구분할 수 없다. 토큰
+    전체가 이미 알려진 device 별칭이면 포트 없는 걸로 보고, 아니면 마지막
+    콜론에서 잘라 포트가 붙은 걸로 본다 — `inventory.aliases`에 별칭·정식 ID가
+    전부 등록돼 있어 이 순서로 항상 올바르게 갈린다.
+    """
+    if token in inventory.aliases:
         return token, None
-    device, port = token.rsplit(":", 1)
-    return device, port
+    if ":" in token:
+        device, port = token.rsplit(":", 1)
+        return device, port
+    return token, None
 
 
 def _coerce_port(value: str) -> int | None:
@@ -255,7 +266,7 @@ def _check_sfc_waypoints_exist(rule: IntentRule, inventory: TopologyInventory) -
     findings: list[ValidationFinding] = []
     waypoints = (rule.routing.waypoints if rule.routing else None) or []
     for token in waypoints:
-        device_part, port_part = _parse_chain_token(token)
+        device_part, port_part = _parse_chain_token(token, inventory)
         device = inventory.aliases.get(device_part, device_part)
         ports = inventory.device_ports.get(device)
         if ports is None:
@@ -296,7 +307,7 @@ def _check_sfc_chain(program: IntentProgram, inventory: TopologyInventory) -> li
     findings: list[ValidationFinding] = []
     for k in range(1, len(rules)):
         token = chain[k - 1]
-        device_part, port_part = _parse_chain_token(token)
+        device_part, port_part = _parse_chain_token(token, inventory)
         token_device = inventory.aliases.get(device_part, device_part)
         rule_device = _device_of(rules[k], inventory)
         if rule_device is None or token_device != rule_device:
