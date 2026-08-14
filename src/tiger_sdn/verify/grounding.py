@@ -241,10 +241,50 @@ def _coerce_port(value: str) -> int | None:
         return None
 
 
+def _check_sfc_waypoints_exist(rule: IntentRule, inventory: TopologyInventory) -> list[ValidationFinding]:
+    """단일 규칙 SFC(제품 스키마 — `prompts/intent_ir.md` + `ir.adapter.
+    from_gold350()`가 만드는 실제 라이브 파서 출력 형태)의 ``routing.
+    waypoints`` 각 토큰이 실제 존재하는 device:port인지만 확인한다.
+
+    연구 스키마(다중 규칙, `from_research()`)와 달리 다음 규칙이 없어
+    "체인이 규칙 순서와 일치하는가"를 비교할 대상 자체가 없다 —
+    `enforcement.device`/`egress_port`(이 규칙 자신의 진입점)는 이미
+    `_check_references`/`_check_feasibility`가 모든 규칙에 대해 일반적으로
+    검사하므로, 여기서는 체인 나머지 홉(웨이포인트 리스트)만 본다.
+    """
+    findings: list[ValidationFinding] = []
+    waypoints = (rule.routing.waypoints if rule.routing else None) or []
+    for token in waypoints:
+        device_part, port_part = _parse_chain_token(token)
+        device = inventory.aliases.get(device_part, device_part)
+        ports = inventory.device_ports.get(device)
+        if ports is None:
+            findings.append(
+                ValidationFinding(
+                    category="reference", code="unknown_device", rule_indices=[0],
+                    message=f"sfc waypoint {token!r} references unknown device {device_part!r}",
+                )
+            )
+            continue
+        if port_part is not None:
+            port = _coerce_port(port_part)
+            if port is None or port not in ports:
+                findings.append(
+                    ValidationFinding(
+                        category="feasibility", code="sfc_waypoint_port_out_of_range", rule_indices=[0],
+                        message=f"sfc waypoint {token!r}: port {port_part} not valid on {device_part!r}",
+                    )
+                )
+    return findings
+
+
 def _check_sfc_chain(program: IntentProgram, inventory: TopologyInventory) -> list[ValidationFinding]:
     rules = program.rules
-    if not any(rule.action == "sfc" for rule in rules):
+    sfc_indices = [i for i, rule in enumerate(rules) if rule.action == "sfc"]
+    if not sfc_indices:
         return []
+    if len(rules) == 1:
+        return _check_sfc_waypoints_exist(rules[0], inventory)
     chain = _sfc_chain_of(program) or []
     if len(chain) != len(rules) - 1:
         return [
@@ -305,7 +345,9 @@ def _check_sfc_chain(program: IntentProgram, inventory: TopologyInventory) -> li
 
 def _check_sfc_role_order(program: IntentProgram) -> list[ValidationFinding]:
     sfc_indices = [i for i, rule in enumerate(program.rules) if rule.action == "sfc"]
-    if not sfc_indices:
+    if len(sfc_indices) <= 1:
+        # 0개면 애초에 검사 대상이 없고, 1개면 순서를 어길 대상 자체가 없다
+        # (단일 규칙 제품 스키마 SFC가 여기 해당 — sfc_role 필드가 아예 없음).
         return []
     roles = [program.rules[i].sfc_role for i in sfc_indices]
     invalid = (

@@ -473,16 +473,19 @@ Full만 페어드로 비교한다(twin-호환 5개 카테고리, SFC 전부·h2�
 코드였다. `orchestrate/pipeline.py`가 `static_validate()` 호출 직전에
 스탬핑하도록 수정.
 
-**설계 중 발견해 별도 이슈로 남긴 버그(이슈 #40):** `verify/grounding.py`의
+**설계 중 발견해 고친 버그(이슈 #40, 2026-08-14 수정):** `verify/grounding.py`의
 `_check_sfc_chain`/`_check_sfc_role_order`가 연구 스키마의 다중 규칙 SFC
 표현(규칙마다 sfc_role, 체인 길이=규칙수-1)을 전제하는데, 실제 배포된 프롬프트
 (`prompts/intent_ir.md`)와 `from_gold350()`은 SFC를 단일 규칙+`routing.
 waypoints`로 표현한다 — GOLD-350 SFC 50건 전부 규칙 1개인데, 그 경우
-`_check_sfc_chain`은 waypoints가 비어 있길 기대해서 실제로는 항상 거부한다.
+`_check_sfc_chain`은 waypoints가 비어 있길 기대해서 실제로는 항상 거부했다.
 Exp-1은 그라운딩을 안 돌리고 Exp-2의 SFC 픽스처는 `from_research()`(다중 규칙)
 경유라, "실제 프로덕트 스키마 SFC 인텐트가 실제 그라운딩 게이트를 통과하는가"가
-이번에 처음 실행됐다. Exp-3 실행 전 고칠지, SFC 카테고리를 Tier A에서도
-"현재는 100% grounding_reject"로 해석하고 넘어갈지는 아직 미정.
+Exp-3 파일럿에서 처음 실행됐다. 두 체크를 규칙 개수로 분기해 단일 규칙이면
+`routing.waypoints` 각 토큰의 device:port 존재 여부만 확인하도록 수정 —
+`experiments/exp2/data/cases_sfc_reroute.jsonl`에 단일 규칙 SFC 케이스가
+0건임을 먼저 확인해 Exp-2 회귀 위험 없앰, `test_exp2_regression.py` 그대로
+초록 확인, GOLD-350 SFC 50건 전부(수정 전 0/50) 그라운딩 통과 확인.
 
 **진행 상황 (2026-08-13):** `experiments/exp3/`(`run.py`/`score.py`/
 `e3_evaluation.py`/`select_tier_b_cases.py`) 스캐폴딩 + 코어 kwarg 확장까지
