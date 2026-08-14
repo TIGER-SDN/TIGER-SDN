@@ -331,8 +331,10 @@ def main() -> None:
                 fh.write(record.model_dump_json() + "\n")
                 fh.flush()
                 n_done += 1
-                if n_done % 10 == 0 or n_done == len(cases):
-                    print(f"  [{n_done}/{len(cases)}]")
+                detail = getattr(record, "case_id", "")
+                if hasattr(record, "decision"):
+                    detail += f" -> {record.decision}"
+                print(f"  [{n_done}/{len(cases)}] {detail}")
 
         if concurrency <= 1:
             for case in cases:
