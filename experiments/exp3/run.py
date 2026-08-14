@@ -259,7 +259,11 @@ def main() -> None:
     parser.add_argument("--model", required=True)
     parser.add_argument("--capture-file", type=Path, help="capture-ir 로그 — no-grounding/no-static/full 필수")
     parser.add_argument("--no-system-log", type=Path, help="Tier A no-system 결과 로그 — --arm no-system --tier B 필수")
-    parser.add_argument("--case-id-file", type=Path, help="Tier B 고정 표본(tierB_case_ids.json) — --tier B 필수")
+    parser.add_argument(
+        "--case-id-file", type=Path,
+        help='{"case_ids": [...]} 형식 파일로 케이스 필터링 — Tier B는 필수(tierB_case_ids.json), '
+             "Tier A는 선택(카테고리 고른 파일럿 표본 등에 사용)",
+    )
     parser.add_argument("--case-id", help="단일 케이스만(디버그용)")
     parser.add_argument("--limit", type=int, help="파일럿용 — 처음 N개 케이스만")
     parser.add_argument("--max-repair-attempts", type=int, default=None)
@@ -282,7 +286,7 @@ def main() -> None:
     cases = load_cases(args.dataset)
     if args.case_id:
         cases = [c for c in cases if c.case_id == args.case_id]
-    elif args.tier == "B":
+    elif args.case_id_file is not None:
         wanted = set(load_tier_b_case_ids(args.case_id_file))
         cases = [c for c in cases if c.case_id in wanted]
     if args.limit:
