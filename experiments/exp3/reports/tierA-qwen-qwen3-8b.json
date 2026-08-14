@@ -1,0 +1,151 @@
+{
+  "scope": "Tier A: GOLD-350 전 케이스, twin 없이(parse -> grounding -> compile -> static_validation). no_grounding/no_static/full 세 arm은 capture-ir 로그의 attempt-0 파싱을 공유한다(LLM 비결정성이 arm 비교를 오염시키지 않도록) — repair로 인한 attempt 1+ 재파싱만 arm마다 독립적으로 갈라진다. no_system은 direct_flow 프롬프트를 쓰는 완전히 별도 경로라 capture를 공유하지 않는다.",
+  "arms": {
+    "full": {
+      "n_cases": 350,
+      "decision_counts": {
+        "REJECT": 80,
+        "APPROVE_WITHOUT_TWIN": 270
+      },
+      "stage_settled_counts": {
+        "llm_self_reject": 80,
+        "approved": 270
+      },
+      "accept_vs_gold": {
+        "tp": 266,
+        "fp": 4,
+        "fn": 34,
+        "tn": 46,
+        "precision": 0.9851851851851852,
+        "recall": 0.8866666666666667,
+        "accuracy": 0.8914285714285715
+      },
+      "repair_attempts": {
+        "mean": 0.04857142857142857,
+        "max": 3,
+        "rescued": 12
+      }
+    },
+    "no_grounding": {
+      "n_cases": 350,
+      "decision_counts": {
+        "REJECT": 80,
+        "APPROVE_WITHOUT_TWIN": 270
+      },
+      "stage_settled_counts": {
+        "llm_self_reject": 80,
+        "approved": 270
+      },
+      "accept_vs_gold": {
+        "tp": 266,
+        "fp": 4,
+        "fn": 34,
+        "tn": 46,
+        "precision": 0.9851851851851852,
+        "recall": 0.8866666666666667,
+        "accuracy": 0.8914285714285715
+      },
+      "repair_attempts": {
+        "mean": 0.03142857142857143,
+        "max": 1,
+        "rescued": 10
+      }
+    },
+    "no_static": {
+      "n_cases": 350,
+      "decision_counts": {
+        "REJECT": 82,
+        "APPROVE_WITHOUT_TWIN": 268
+      },
+      "stage_settled_counts": {
+        "llm_self_reject": 81,
+        "approved": 268,
+        "grounding_reject": 1
+      },
+      "accept_vs_gold": {
+        "tp": 264,
+        "fp": 4,
+        "fn": 36,
+        "tn": 46,
+        "precision": 0.9850746268656716,
+        "recall": 0.88,
+        "accuracy": 0.8857142857142857
+      },
+      "repair_attempts": {
+        "mean": 0.04,
+        "max": 3,
+        "rescued": 7
+      }
+    },
+    "no_system": {
+      "n_cases": 350,
+      "decision_counts": {
+        "REJECT": 216,
+        "APPROVE_WITHOUT_TWIN": 134
+      },
+      "stage_settled_counts": {
+        "llm_self_reject": 216,
+        "approved": 134
+      },
+      "accept_vs_gold": {
+        "tp": 132,
+        "fp": 2,
+        "fn": 168,
+        "tn": 48,
+        "precision": 0.9850746268656716,
+        "recall": 0.44,
+        "accuracy": 0.5142857142857142
+      },
+      "repair_attempts": {
+        "mean": 0.0,
+        "max": 0,
+        "rescued": 0
+      }
+    }
+  },
+  "stage_contribution": {
+    "grounding": {
+      "silently_approved_count": 3,
+      "rejected_by_full_count": 1,
+      "fixed_by_full_count": 2,
+      "not_caught_by_full_count": 0,
+      "real_catch_rate": 1.0,
+      "case_ids": {
+        "rejected": [
+          "G-CMP-049"
+        ],
+        "fixed": [
+          "G-RRT-043",
+          "G-SFC-046"
+        ],
+        "not_caught": []
+      }
+    },
+    "static_validation": {
+      "silently_approved_count": 3,
+      "rejected_by_full_count": 0,
+      "fixed_by_full_count": 3,
+      "not_caught_by_full_count": 0,
+      "real_catch_rate": 1.0,
+      "case_ids": {
+        "rejected": [],
+        "fixed": [
+          "G-CMP-008",
+          "G-CMP-007",
+          "G-CMP-015"
+        ],
+        "not_caught": []
+      }
+    }
+  },
+  "no_system_vs_full": {
+    "no_system": {
+      "false_approve_count": 2,
+      "false_reject_count": 168
+    },
+    "full": {
+      "false_approve_count": 4,
+      "false_reject_count": 34
+    }
+  }
+}
