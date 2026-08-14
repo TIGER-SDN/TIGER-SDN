@@ -139,6 +139,12 @@ def _prefix(ip: str) -> str:
 def _transport_criterion(protocol: Optional[str], direction: str, port: int) -> TransportCriterion:
     if protocol not in ("tcp", "udp"):
         raise CompilationError("전송 계층 포트는 protocol이 tcp 또는 udp여야 합니다")
+    if not 1 <= port <= 65535:
+        # IR의 src_port/dst_port는 0을 허용하지만(ge=0), ONOS TransportCriterion의
+        # tcpPort/udpPort는 1 이상만 유효하다 — 이 불일치를 CompilationError로
+        # 명시적으로 거부하지 않으면 pydantic ValidationError가 그대로 새어나가
+        # 파이프라인의 CompilationError 캐치를 우회한다.
+        raise CompilationError(f"포트 {port}는 유효한 전송 계층 포트가 아닙니다(1-65535)")
     key = "tcpPort" if protocol == "tcp" else "udpPort"
     return TransportCriterion(type=f"{protocol.upper()}_{direction}", **{key: port})  # type: ignore[arg-type]
 
