@@ -336,6 +336,72 @@ def test_verify_program_rejects_sfc_role_order_duplicate_ingress(inventory: Topo
     assert any(f.code == "path_role_order_invalid" for f in report.findings)
 
 
+# ── 그라운딩: 단일 규칙 SFC (제품 스키마) ────────────────────────────────
+#
+# 위 테스트들은 전부 다중 규칙(연구 스키마, from_research()가 sfc_chain을
+# 규칙마다 복제)을 쓴다. 실제 배포된 프롬프트(prompts/intent_ir.md)와
+# from_gold350()은 SFC를 단일 규칙 + routing.waypoints로 표현한다 —
+# sfc_role 필드 자체가 없다. GOLD-350 SFC 50건 전부 이 형태(직접 확인).
+# 이 두 체크(_check_sfc_chain/_check_sfc_role_order)가 원래 다중 규칙만
+# 가정하고 있어서 실제 라이브 파서 출력을 항상 거부하던 버그를 고쳤다
+# (이슈 #40).
+
+
+def _single_rule_sfc(*, device: str, egress_port: int, waypoints: list[str]) -> IntentRule:
+    return IntentRule(
+        action="sfc",
+        selector=IntentSelector(source={"host": "h1"}, destination={"host": "h2"}),
+        enforcement=IntentEnforcement(device=device, egress_port=egress_port),
+        routing={"waypoints": waypoints},
+    )
+
+
+def test_verify_program_accepts_single_rule_sfc_with_valid_waypoints(inventory: TopologyInventory):
+    rule = _single_rule_sfc(device="s1", egress_port=9, waypoints=["of:0000000000000001:9"])
+    report = verify_program(IntentProgram(rules=[rule]), inventory)
+    assert report.is_valid
+
+
+def test_verify_program_rejects_single_rule_sfc_unknown_waypoint_device(inventory: TopologyInventory):
+    rule = _single_rule_sfc(device="s1", egress_port=9, waypoints=["no-such-switch:1"])
+    report = verify_program(IntentProgram(rules=[rule]), inventory)
+    assert any(f.code == "unknown_device" for f in report.findings)
+
+
+def test_verify_program_rejects_single_rule_sfc_waypoint_port_out_of_range(inventory: TopologyInventory):
+    rule = _single_rule_sfc(device="s1", egress_port=9, waypoints=["of:0000000000000001:999"])
+    report = verify_program(IntentProgram(rules=[rule]), inventory)
+    assert any(f.code == "sfc_waypoint_port_out_of_range" for f in report.findings)
+
+
+def test_verify_program_all_gold350_sfc_cases_pass_grounding():
+    """GOLD-350 SFC 50건 전부(실제 from_gold350() 변환 형태)가 그라운딩을
+    통과해야 한다 — 이슈 #40의 회귀 방지. 고치기 전엔 50/50 전부 거부됐다."""
+    import json
+    from pathlib import Path
+
+    from tiger_sdn.ir import from_gold350
+    from tiger_sdn.verify import load_topology_inventory
+
+    root = Path(__file__).resolve().parents[1]
+    topology = json.loads((root / "data/gold/topology_eval.json").read_text(encoding="utf-8"))
+    live_inventory = load_topology_inventory(topology)
+
+    lines = (root / "data/gold/gold350_eval.jsonl").read_text(encoding="utf-8").splitlines()
+    cases = [json.loads(line) for line in lines if line.strip()]
+    sfc_cases = [c for c in cases if c["category"] == "sfc"]
+    assert len(sfc_cases) == 50
+
+    failures = []
+    for case in sfc_cases:
+        gold = case["gold"]
+        prediction = from_gold350({"status": "accepted", "rules": [{k: v for k, v in gold.items() if k != "status"}]})
+        report = verify_program(prediction.program, live_inventory)
+        if not report.is_valid:
+            failures.append((case["case_id"], [f.code for f in report.findings]))
+    assert failures == []
+
+
 def test_verify_program_rejects_reroute_avoid_device_conflict(inventory: TopologyInventory):
     rule = IntentRule(
         action="reroute",

@@ -415,16 +415,11 @@ def test_single_rule_sfc_program_is_stamped_sfc_not_compound(monkeypatch: pytest
 
     monkeypatch.setattr(pipeline_module, "static_validate", spy_static_validate)
 
-    # skip_grounding=True — grounding.py's _check_sfc_chain/_check_sfc_role_order
-    # (verify/grounding.py) still assume the *research* schema's multi-rule SFC
-    # representation (chain length == len(rules)-1, per-rule sfc_role) and reject
-    # every single-rule SFC program outright, including this one -- a separate,
-    # pre-existing bug from what this test targets (intent_action stamping in
-    # static.py). Discovered while writing this test; filed as its own issue
-    # rather than fixed here.
+    # grounding no longer needs to be skipped here -- issue #40 (grounding
+    # rejected every single-rule/product-schema SFC program outright) is fixed.
     result = run_pipeline(
         "route h1 to h2 through the service chain", model="fake-model", topology=TOPOLOGY,
-        onos_client=_FakeOnosClient(), skip_grounding=True,
+        onos_client=_FakeOnosClient(),
     )
 
     assert result.prediction.program.is_compound is False
