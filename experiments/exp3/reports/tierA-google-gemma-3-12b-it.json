@@ -1,0 +1,296 @@
+{
+  "scope": "Tier A: GOLD-350 전 케이스, twin 없이(parse -> grounding -> compile -> static_validation). no_grounding/no_static/full 세 arm은 capture-ir 로그의 attempt-0 파싱을 공유한다(LLM 비결정성이 arm 비교를 오염시키지 않도록) — repair로 인한 attempt 1+ 재파싱만 arm마다 독립적으로 갈라진다. no_system은 direct_flow 프롬프트를 쓰는 완전히 별도 경로라 capture를 공유하지 않는다.",
+  "arms": {
+    "full": {
+      "n_cases": 350,
+      "decision_counts": {
+        "REJECT": 140,
+        "APPROVE_WITHOUT_TWIN": 209,
+        "ERROR": 1
+      },
+      "stage_settled_counts": {
+        "llm_self_reject": 85,
+        "approved": 209,
+        "grounding_reject": 55,
+        "compile_error": 1
+      },
+      "accept_vs_gold": {
+        "tp": 197,
+        "fp": 12,
+        "fn": 103,
+        "tn": 38,
+        "precision": 0.9425837320574163,
+        "recall": 0.6566666666666666,
+        "accuracy": 0.6714285714285714
+      },
+      "repair_attempts": {
+        "mean": 0.7514285714285714,
+        "max": 3,
+        "rescued": 84
+      }
+    },
+    "no_grounding": {
+      "n_cases": 350,
+      "decision_counts": {
+        "REJECT": 77,
+        "APPROVE_WITHOUT_TWIN": 269,
+        "ERROR": 4
+      },
+      "stage_settled_counts": {
+        "llm_self_reject": 73,
+        "approved": 269,
+        "compile_error": 4,
+        "static_reject": 4
+      },
+      "accept_vs_gold": {
+        "tp": 253,
+        "fp": 16,
+        "fn": 47,
+        "tn": 34,
+        "precision": 0.9405204460966543,
+        "recall": 0.8433333333333334,
+        "accuracy": 0.82
+      },
+      "repair_attempts": {
+        "mean": 0.04857142857142857,
+        "max": 3,
+        "rescued": 4
+      }
+    },
+    "no_static": {
+      "n_cases": 350,
+      "decision_counts": {
+        "REJECT": 139,
+        "APPROVE_WITHOUT_TWIN": 210,
+        "ERROR": 1
+      },
+      "stage_settled_counts": {
+        "llm_self_reject": 86,
+        "approved": 210,
+        "grounding_reject": 53,
+        "compile_error": 1
+      },
+      "accept_vs_gold": {
+        "tp": 198,
+        "fp": 12,
+        "fn": 102,
+        "tn": 38,
+        "precision": 0.9428571428571428,
+        "recall": 0.66,
+        "accuracy": 0.6742857142857143
+      },
+      "repair_attempts": {
+        "mean": 0.7657142857142857,
+        "max": 3,
+        "rescued": 85
+      }
+    },
+    "no_system": {
+      "n_cases": 350,
+      "decision_counts": {
+        "REJECT": 73,
+        "APPROVE_WITHOUT_TWIN": 277
+      },
+      "stage_settled_counts": {
+        "llm_self_reject": 73,
+        "approved": 277
+      },
+      "accept_vs_gold": {
+        "tp": 254,
+        "fp": 23,
+        "fn": 46,
+        "tn": 27,
+        "precision": 0.9169675090252708,
+        "recall": 0.8466666666666667,
+        "accuracy": 0.8028571428571428
+      },
+      "repair_attempts": {
+        "mean": 0.0,
+        "max": 0,
+        "rescued": 0
+      }
+    }
+  },
+  "stage_contribution": {
+    "grounding": {
+      "silently_approved_count": 144,
+      "rejected_by_full_count": 62,
+      "fixed_by_full_count": 82,
+      "not_caught_by_full_count": 0,
+      "real_catch_rate": 1.0,
+      "case_ids": {
+        "rejected": [
+          "G-AMB-016",
+          "G-AMB-019",
+          "G-AMB-018",
+          "G-AMB-047",
+          "G-CMP-002",
+          "G-CMP-036",
+          "G-CMP-040",
+          "G-CMP-037",
+          "G-CMP-043",
+          "G-CMP-042",
+          "G-FWD-009",
+          "G-CMP-007",
+          "G-CMP-008",
+          "G-FWD-036",
+          "G-FWD-029",
+          "G-QOS-003",
+          "G-QOS-004",
+          "G-CMP-013",
+          "G-QOS-009",
+          "G-QOS-014",
+          "G-QOS-016",
+          "G-QOS-015",
+          "G-QOS-027",
+          "G-QOS-024",
+          "G-QOS-033",
+          "G-QOS-040",
+          "G-QOS-044",
+          "G-RRT-002",
+          "G-RRT-001",
+          "G-RRT-003",
+          "G-RRT-004",
+          "G-RRT-005",
+          "G-RRT-006",
+          "G-RRT-007",
+          "G-RRT-008",
+          "G-RRT-009",
+          "G-RRT-010",
+          "G-RRT-011",
+          "G-RRT-013",
+          "G-RRT-019",
+          "G-RRT-017",
+          "G-RRT-015",
+          "G-RRT-018",
+          "G-RRT-016",
+          "G-RRT-037",
+          "G-RRT-038",
+          "G-RRT-036",
+          "G-RRT-040",
+          "G-RRT-039",
+          "G-RRT-041",
+          "G-RRT-042",
+          "G-RRT-043",
+          "G-RRT-044",
+          "G-RRT-046",
+          "G-RRT-050",
+          "G-SEC-007",
+          "G-SEC-008",
+          "G-SEC-049",
+          "G-SFC-024",
+          "G-SFC-028",
+          "G-SFC-039",
+          "G-SFC-043"
+        ],
+        "fixed": [
+          "G-CMP-006",
+          "G-CMP-015",
+          "G-CMP-020",
+          "G-CMP-019",
+          "G-CMP-018",
+          "G-CMP-016",
+          "G-CMP-023",
+          "G-CMP-026",
+          "G-CMP-025",
+          "G-CMP-028",
+          "G-CMP-030",
+          "G-FWD-003",
+          "G-FWD-001",
+          "G-FWD-002",
+          "G-FWD-005",
+          "G-FWD-004",
+          "G-FWD-006",
+          "G-FWD-008",
+          "G-FWD-022",
+          "G-FWD-021",
+          "G-FWD-024",
+          "G-CMP-011",
+          "G-FWD-025",
+          "G-FWD-027",
+          "G-FWD-026",
+          "G-FWD-028",
+          "G-FWD-031",
+          "G-FWD-032",
+          "G-FWD-030",
+          "G-FWD-040",
+          "G-FWD-043",
+          "G-FWD-049",
+          "G-FWD-047",
+          "G-FWD-042",
+          "G-FWD-041",
+          "G-QOS-001",
+          "G-FWD-048",
+          "G-FWD-044",
+          "G-QOS-005",
+          "G-QOS-012",
+          "G-QOS-007",
+          "G-QOS-017",
+          "G-QOS-019",
+          "G-QOS-025",
+          "G-QOS-026",
+          "G-QOS-029",
+          "G-QOS-031",
+          "G-QOS-036",
+          "G-QOS-039",
+          "G-QOS-047",
+          "G-QOS-043",
+          "G-QOS-049",
+          "G-SEC-001",
+          "G-SEC-003",
+          "G-SEC-002",
+          "G-SEC-004",
+          "G-SEC-005",
+          "G-SEC-006",
+          "G-SEC-010",
+          "G-SEC-011",
+          "G-SEC-012",
+          "G-SEC-013",
+          "G-SEC-014",
+          "G-SEC-016",
+          "G-SEC-017",
+          "G-SEC-019",
+          "G-SEC-018",
+          "G-SEC-020",
+          "G-SEC-031",
+          "G-SEC-032",
+          "G-SEC-033",
+          "G-SEC-034",
+          "G-SEC-035",
+          "G-SEC-043",
+          "G-SEC-037",
+          "G-SEC-044",
+          "G-SEC-039",
+          "G-SEC-041",
+          "G-SEC-040",
+          "G-SEC-045",
+          "G-SEC-050",
+          "G-SFC-033"
+        ],
+        "not_caught": []
+      }
+    },
+    "static_validation": {
+      "silently_approved_count": 0,
+      "rejected_by_full_count": 0,
+      "fixed_by_full_count": 0,
+      "not_caught_by_full_count": 0,
+      "real_catch_rate": null,
+      "case_ids": {
+        "rejected": [],
+        "fixed": [],
+        "not_caught": []
+      }
+    }
+  },
+  "no_system_vs_full": {
+    "no_system": {
+      "false_approve_count": 23,
+      "false_reject_count": 46
+    },
+    "full": {
+      "false_approve_count": 12,
+      "false_reject_count": 103
+    }
+  }
+}
